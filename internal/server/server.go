@@ -21,11 +21,11 @@ import (
 
 // Server represents the ProxyDAV server
 type Server struct {
-	config      *config.Config
-	vfs         *filesystem.VirtualFS
-	cache       *cache.MetadataCache
-	httpServer  *http.Server
-	webdavHandler *handlers.WebDAVHandler
+	config         *config.Config
+	vfs            *filesystem.VirtualFS
+	cache          *cache.MetadataCache
+	httpServer     *http.Server
+	webdavHandler  *handlers.WebDAVHandler
 	browserHandler *handlers.BrowserHandler
 }
 
@@ -45,10 +45,10 @@ func New(cfg *config.Config, files []types.FileEntry) *Server {
 	// Create HTTP server
 	mux := http.NewServeMux()
 	server := &Server{
-		config: cfg,
-		vfs:    vfs,
-		cache:  metadataCache,
-		webdavHandler: webdavHandler,
+		config:         cfg,
+		vfs:            vfs,
+		cache:          metadataCache,
+		webdavHandler:  webdavHandler,
 		browserHandler: browserHandler,
 		httpServer: &http.Server{
 			Addr:         fmt.Sprintf(":%d", cfg.Port),
@@ -123,12 +123,12 @@ func (s *Server) basicAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		
+
 		// Wrap response writer to capture status code
 		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
-		
+
 		next(wrapped, r)
-		
+
 		duration := time.Since(start)
 		log.Printf("%s %s %d %v %s", r.Method, r.URL.Path, wrapped.statusCode, duration, r.UserAgent())
 	}

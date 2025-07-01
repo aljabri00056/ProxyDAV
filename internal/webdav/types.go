@@ -44,20 +44,20 @@ type Collection struct {
 }
 
 type PropFind struct {
-	XMLName xml.Name `xml:"DAV: propfind"`
-	Prop    *PropReq `xml:"prop,omitempty"`
+	XMLName xml.Name  `xml:"DAV: propfind"`
+	Prop    *PropReq  `xml:"prop,omitempty"`
 	AllProp *struct{} `xml:"allprop,omitempty"`
 }
 
 type PropReq struct {
-	XMLName           xml.Name `xml:"DAV: prop"`
-	DisplayName       *struct{} `xml:"displayname,omitempty"`
-	ResourceType      *struct{} `xml:"resourcetype,omitempty"`
-	ContentLength     *struct{} `xml:"getcontentlength,omitempty"`
-	ContentType       *struct{} `xml:"getcontenttype,omitempty"`
-	LastModified      *struct{} `xml:"getlastmodified,omitempty"`
-	CreationDate      *struct{} `xml:"creationdate,omitempty"`
-	ETag              *struct{} `xml:"getetag,omitempty"`
+	XMLName       xml.Name  `xml:"DAV: prop"`
+	DisplayName   *struct{} `xml:"displayname,omitempty"`
+	ResourceType  *struct{} `xml:"resourcetype,omitempty"`
+	ContentLength *struct{} `xml:"getcontentlength,omitempty"`
+	ContentType   *struct{} `xml:"getcontenttype,omitempty"`
+	LastModified  *struct{} `xml:"getlastmodified,omitempty"`
+	CreationDate  *struct{} `xml:"creationdate,omitempty"`
+	ETag          *struct{} `xml:"getetag,omitempty"`
 }
 
 // Helper functions for WebDAV responses

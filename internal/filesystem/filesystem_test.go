@@ -112,7 +112,7 @@ func TestVirtualFS_GetAllPaths(t *testing.T) {
 
 	// Should include all files and directories
 	expectedPaths := []string{"/", "/other", "/other/file.txt", "/test", "/test/file.txt"}
-	
+
 	if len(paths) != len(expectedPaths) {
 		t.Errorf("Expected %d paths, got %d", len(expectedPaths), len(paths))
 	}
