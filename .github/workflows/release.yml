@@ -127,18 +127,21 @@ jobs:
           cd dist
           ZIP_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip"
           
-          zip "${ZIP_NAME}" "${BINARY_NAME}"
+          TEMP_DIR="proxydav"
+          mkdir -p "${TEMP_DIR}"
+          mv "${BINARY_NAME}" "${TEMP_DIR}/"
+          zip -r "${ZIP_NAME}" "${TEMP_DIR}"
           
           # Verify the zip was created
           if [ ! -f "${ZIP_NAME}" ]; then
             echo "Error: Failed to create ${ZIP_NAME}"
             exit 1
           fi
-          
-          echo "Created: ${ZIP_NAME} containing ${BINARY_NAME}"
-          
-          # Clean up the raw binary, keep only the zip
-          rm "${BINARY_NAME}"
+
+          echo "Created: ${ZIP_NAME} containing ${TEMP_DIR}/${BINARY_NAME}"
+
+          # Clean up the temporary directory
+          rm -rf "${TEMP_DIR}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
