@@ -12,7 +12,7 @@ func TestConfigValidation(t *testing.T) {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	content := `[{"path": "/test.txt", "url": "https://example.com/test.txt"}]`
 	if _, err := tmpFile.WriteString(content); err != nil {
 		t.Fatalf("Failed to write temp file: %v", err)

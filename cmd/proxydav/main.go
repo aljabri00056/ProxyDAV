@@ -21,7 +21,7 @@ func main() {
 	// Handle version flag
 	var showVersion bool
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
-	
+
 	// Load configuration (this will parse all flags including version)
 	cfg := config.Load()
 

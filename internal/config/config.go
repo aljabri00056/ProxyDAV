@@ -12,9 +12,9 @@ import (
 
 // Config holds all configuration options for the ProxyDAV server
 type Config struct {
-	Port        int    `json:"port"`
-	MappingFile string `json:"mapping_file"`
-	CacheTTL    int    `json:"cache_ttl_seconds"`
+	Port         int    `json:"port"`
+	MappingFile  string `json:"mapping_file"`
+	CacheTTL     int    `json:"cache_ttl_seconds"`
 	UseRedirect  bool   `json:"use_redirect"`
 	AuthEnabled  bool   `json:"auth_enabled"`
 	AuthUser     string `json:"auth_user"`
@@ -26,9 +26,9 @@ type Config struct {
 // Load loads configuration from environment variables, command line flags, and defaults
 func Load() *Config {
 	config := &Config{
-		Port:        8080,
-		MappingFile: "",
-		CacheTTL:    3600,
+		Port:         8080,
+		MappingFile:  "",
+		CacheTTL:     3600,
 		UseRedirect:  false,
 		AuthEnabled:  false,
 		AuthUser:     "",
