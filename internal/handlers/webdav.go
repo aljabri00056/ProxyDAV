@@ -64,7 +64,9 @@ func (h *WebDAVHandler) handleOptions(w http.ResponseWriter, r *http.Request) {
 // handlePropFind handles PROPFIND requests
 func (h *WebDAVHandler) handlePropFind(w http.ResponseWriter, r *http.Request) {
 	requestPath := r.URL.Path
-	if !h.vfs.Exists(requestPath) {
+	// Normalize path to match how VFS stores paths
+	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
+	if !h.vfs.Exists(normalizedPath) {
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
@@ -77,13 +79,13 @@ func (h *WebDAVHandler) handlePropFind(w http.ResponseWriter, r *http.Request) {
 	var responses []webdav.Response
 
 	// Add response for the requested path itself
-	if response := h.createResponse(requestPath); response != nil {
+	if response := h.createResponse(normalizedPath); response != nil {
 		responses = append(responses, *response)
 	}
 
 	// If it's a directory and depth allows, add children
-	if depth != "0" && h.vfs.IsDir(requestPath) {
-		children := h.vfs.ListDir(requestPath)
+	if depth != "0" && h.vfs.IsDir(normalizedPath) {
+		children := h.vfs.ListDir(normalizedPath)
 		for _, child := range children {
 			if response := h.createResponse(child.Path); response != nil {
 				responses = append(responses, *response)
@@ -115,8 +117,14 @@ func (h *WebDAVHandler) createResponse(requestPath string) *webdav.Response {
 		return nil
 	}
 
+	// For WebDAV compatibility, directories should have trailing slashes in href
+	href := requestPath
+	if h.vfs.IsDir(requestPath) && !strings.HasSuffix(href, "/") && href != "/" {
+		href += "/"
+	}
+
 	response := &webdav.Response{
-		Href: requestPath,
+		Href: href,
 		Propstat: webdav.Propstat{
 			Status: "HTTP/1.1 200 OK",
 		},
@@ -221,7 +229,9 @@ func (h *WebDAVHandler) handleGetHead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, exists := h.vfs.GetItem(requestPath)
+	// Normalize path to match how VFS stores paths
+	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
+	item, exists := h.vfs.GetItem(normalizedPath)
 	if !exists {
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return

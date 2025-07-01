@@ -169,13 +169,15 @@ func NewBrowserHandler(vfs *filesystem.VirtualFS) *BrowserHandler {
 // ServeHTTP handles browser requests
 func (h *BrowserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestPath := r.URL.Path
+	// Normalize path to match how VFS stores paths
+	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
 
-	if !h.vfs.Exists(requestPath) {
+	if !h.vfs.Exists(normalizedPath) {
 		http.Error(w, "Not Found", http.StatusNotFound)
 		return
 	}
 
-	item, exists := h.vfs.GetItem(requestPath)
+	item, exists := h.vfs.GetItem(normalizedPath)
 	if exists && !item.IsDir {
 		// Redirect to the actual file URL for browser viewing
 		http.Redirect(w, r, item.URL, http.StatusFound)
@@ -183,7 +185,7 @@ func (h *BrowserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate directory listing
-	h.renderDirectoryListing(w, requestPath)
+	h.renderDirectoryListing(w, normalizedPath)
 }
 
 // BreadcrumbItem represents a breadcrumb item
