@@ -2,10 +2,18 @@
 
 .PHONY: build run clean test test-coverage help deps fmt vet
 
+# Version information
+VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
+COMMIT ?= $(shell git rev-parse HEAD)
+DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+# Build flags
+LDFLAGS = -ldflags "-X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE) -w -s"
+
 # Build the application
 build:
 	@echo "Building ProxyDAV..."
-	@go build -o proxydav ./cmd/proxydav
+	@go build $(LDFLAGS) -o proxydav ./cmd/proxydav
 
 # Run the application with default settings
 run:
