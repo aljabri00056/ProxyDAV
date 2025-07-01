@@ -72,7 +72,7 @@ jobs:
             suffix: darwin-arm64
           - goos: windows
             goarch: amd64
-            suffix: windows-amd64.exe
+            suffix: windows-amd64
           - goos: freebsd
             goarch: amd64
             suffix: freebsd-amd64
@@ -109,7 +109,6 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
-          # Create build directory
           mkdir -p dist
           
           # Set binary name based on OS (always use "proxydav" with proper extension)
@@ -125,21 +124,29 @@ jobs:
             -o "dist/${BINARY_NAME}" \
             ./cmd/proxydav
           
-          # Create zip file with proper naming
           cd dist
           ZIP_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            # Remove .exe from suffix since we're adding it back
-            ZIP_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip"
-          fi
+          
           zip "${ZIP_NAME}" "${BINARY_NAME}"
-          rm "${BINARY_NAME}"  # Remove the raw binary, keep only the zip
+          
+          # Verify the zip was created
+          if [ ! -f "${ZIP_NAME}" ]; then
+            echo "Error: Failed to create ${ZIP_NAME}"
+            exit 1
+          fi
+          
+          echo "Created: ${ZIP_NAME} containing ${BINARY_NAME}"
+          
+          # Clean up the raw binary, keep only the zip
+          rm "${BINARY_NAME}"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: proxydav-${{ matrix.suffix }}
-          path: dist/*
+          path: dist/proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip
+          if-no-files-found: error
+          retention-days: 7
 
   release:
     name: Create Release
@@ -152,7 +159,7 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: artifacts
 
       - name: Get version from tag
         id: get_version
@@ -160,35 +167,34 @@ jobs:
 
       - name: Prepare release assets
         run: |
-          # Flatten the artifact directory structure
-          find dist -name "proxydav-*.zip" -type f -exec mv {} dist/ \;
+          mkdir -p dist
           
-          # Remove empty directories
-          find dist -type d -empty -delete
+          # Move all zip files from artifact subdirectories to dist/
+          find artifacts -name "proxydav-*.zip" -type f -exec mv {} dist/ \;
           
           # List all files for verification
           ls -la dist/
+          
+          # Verify we have the expected number of files (6 platforms)
+          file_count=$(ls -1 dist/proxydav-*.zip 2>/dev/null | wc -l)
+          if [ "$file_count" -ne 6 ]; then
+            echo "Error: Expected 6 zip files, found $file_count"
+            ls -la dist/
+            exit 1
+          fi
+          
+          echo "Successfully prepared $file_count release assets"
 
       - name: Generate release notes
         id: release_notes
         run: |
-          # Extract changelog for this version if it exists
-          if [ -f "CHANGELOG.md" ]; then
-            # Try to extract version-specific changelog
-            awk '/^## \[?'"${{ steps.get_version.outputs.VERSION }}"'\]?/{flag=1; next} /^## /{flag=0} flag' CHANGELOG.md > release_notes.txt
-            if [ ! -s release_notes.txt ]; then
-              echo "Release ${{ steps.get_version.outputs.VERSION }}" > release_notes.txt
-              echo "" >> release_notes.txt
-              echo "Built from commit: ${{ github.sha }}" >> release_notes.txt
-            fi
-          else
-            echo "Release ${{ steps.get_version.outputs.VERSION }}" > release_notes.txt
-            echo "" >> release_notes.txt
-            echo "Built from commit: ${{ github.sha }}" >> release_notes.txt
-            echo "" >> release_notes.txt
-            echo "### Changes" >> release_notes.txt
-            echo "See commit history for detailed changes." >> release_notes.txt
-          fi
+
+          echo "Release ${{ steps.get_version.outputs.VERSION }}" > release_notes.txt
+          echo "" >> release_notes.txt
+          echo "Built from commit: ${{ github.sha }}" >> release_notes.txt
+          echo "" >> release_notes.txt
+          echo "### Changes" >> release_notes.txt
+          echo "See commit history for detailed changes." >> release_notes.txt
           
           # Add binary information
           echo "" >> release_notes.txt
@@ -207,5 +213,7 @@ jobs:
           body_path: release_notes.txt
           draft: false
           prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
-          files: dist/proxydav-*.zip
+          files: |
+            dist/proxydav-*.zip
           token: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: true
