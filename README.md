@@ -21,8 +21,10 @@ A high-performance WebDAV server that creates a virtual filesystem from remote H
 ### Installation
 
 ```bash
-curl aj-get.vercel.app/ProxyDAV | bash
+curl -sSL aj-get.vercel.app/ProxyDAV | bash
 ```
+
+Or download the latest release for your platform from the [releases page](https://github.com/aljabri00056/ProxyDAV/releases).
 
 ### Build from Source
 
