@@ -125,9 +125,9 @@ jobs:
             ./cmd/proxydav
           
           cd dist
-          ZIP_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip"
           
-          TEMP_DIR="proxydav"
+          TEMP_DIR="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}"
+          ZIP_NAME="${TEMP_DIR}.zip"
           mkdir -p "${TEMP_DIR}"
           mv "${BINARY_NAME}" "${TEMP_DIR}/"
           zip -r "${ZIP_NAME}" "${TEMP_DIR}"
