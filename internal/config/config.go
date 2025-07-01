@@ -12,9 +12,9 @@ import (
 
 // Config holds all configuration options for the ProxyDAV server
 type Config struct {
-	Port         int    `json:"port"`
-	ConfigFile   string `json:"config_file"`
-	CacheTTL     int    `json:"cache_ttl_seconds"`
+	Port        int    `json:"port"`
+	MappingFile string `json:"mapping_file"`
+	CacheTTL    int    `json:"cache_ttl_seconds"`
 	UseRedirect  bool   `json:"use_redirect"`
 	AuthEnabled  bool   `json:"auth_enabled"`
 	AuthUser     string `json:"auth_user"`
@@ -26,9 +26,9 @@ type Config struct {
 // Load loads configuration from environment variables, command line flags, and defaults
 func Load() *Config {
 	config := &Config{
-		Port:         8080,
-		ConfigFile:   "",
-		CacheTTL:     3600,
+		Port:        8080,
+		MappingFile: "",
+		CacheTTL:    3600,
 		UseRedirect:  false,
 		AuthEnabled:  false,
 		AuthUser:     "",
@@ -39,7 +39,7 @@ func Load() *Config {
 
 	// Parse command line flags
 	flag.IntVar(&config.Port, "port", config.Port, "Port to listen on")
-	flag.StringVar(&config.ConfigFile, "config", config.ConfigFile, "Path to JSON file with file mappings (required)")
+	flag.StringVar(&config.MappingFile, "mappings", config.MappingFile, "Path to JSON file with file mappings (required)")
 	flag.IntVar(&config.CacheTTL, "cache-ttl", config.CacheTTL, "Cache TTL in seconds")
 	flag.BoolVar(&config.UseRedirect, "redirect", config.UseRedirect, "Use 302 redirects instead of proxying content")
 	flag.BoolVar(&config.AuthEnabled, "auth", config.AuthEnabled, "Enable HTTP Basic authentication")
@@ -55,8 +55,8 @@ func Load() *Config {
 			config.Port = p
 		}
 	}
-	if configFile := os.Getenv("CONFIG_FILE"); configFile != "" {
-		config.ConfigFile = configFile
+	if mappingFile := os.Getenv("MAPPING_FILE"); mappingFile != "" {
+		config.MappingFile = mappingFile
 	}
 	if ttl := os.Getenv("CACHE_TTL"); ttl != "" {
 		if t, err := strconv.Atoi(ttl); err == nil {
@@ -87,16 +87,16 @@ func Load() *Config {
 	return config
 }
 
-// LoadFileEntries loads file entries from the configuration file
-func LoadFileEntries(configFile string) ([]types.FileEntry, error) {
-	data, err := os.ReadFile(configFile)
+// LoadFileEntries loads file entries from the mapping file
+func LoadFileEntries(mappingFile string) ([]types.FileEntry, error) {
+	data, err := os.ReadFile(mappingFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read config file: %w", err)
+		return nil, fmt.Errorf("failed to read mapping file: %w", err)
 	}
 
 	var files []types.FileEntry
 	if err := json.Unmarshal(data, &files); err != nil {
-		return nil, fmt.Errorf("failed to parse config file: %w", err)
+		return nil, fmt.Errorf("failed to parse mapping file: %w", err)
 	}
 
 	return files, nil
@@ -107,11 +107,11 @@ func (c *Config) Validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return fmt.Errorf("port must be between 1 and 65535")
 	}
-	if c.ConfigFile == "" {
-		return fmt.Errorf("config file path is required, please specify with -config flag")
+	if c.MappingFile == "" {
+		return fmt.Errorf("mapping file path is required, please specify with -mappings flag")
 	}
-	if _, err := os.Stat(c.ConfigFile); os.IsNotExist(err) {
-		return fmt.Errorf("config file does not exist: %s", c.ConfigFile)
+	if _, err := os.Stat(c.MappingFile); os.IsNotExist(err) {
+		return fmt.Errorf("mapping file does not exist: %s", c.MappingFile)
 	}
 	if c.CacheTTL < 0 {
 		return fmt.Errorf("cache TTL cannot be negative")

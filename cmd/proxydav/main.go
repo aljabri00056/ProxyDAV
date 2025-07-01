@@ -38,7 +38,7 @@ func main() {
 	}
 
 	// Load file entries
-	files, err := config.LoadFileEntries(cfg.ConfigFile)
+	files, err := config.LoadFileEntries(cfg.MappingFile)
 	if err != nil {
 		log.Fatalf("Failed to load file entries: %v", err)
 	}
@@ -46,7 +46,7 @@ func main() {
 	if len(files) == 0 {
 		log.Println("Warning: No files configured")
 	} else {
-		log.Printf("Loaded %d file entries from %s", len(files), cfg.ConfigFile)
+		log.Printf("Loaded %d file entries from %s", len(files), cfg.MappingFile)
 	}
 
 	// Create and start server

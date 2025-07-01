@@ -20,10 +20,10 @@ run:
 	@echo "Starting ProxyDAV server..."
 	@go run ./cmd/proxydav
 
-# Run with custom configuration
+# Run with custom mapping file
 run-config:
-	@echo "Starting ProxyDAV server with custom config..."
-	@go run ./cmd/proxydav -port 9000 -config files.json -cache-ttl 600
+	@echo "Starting ProxyDAV server with custom mappings..."
+	@go run ./cmd/proxydav -port 9000 -mappings files.json -cache-ttl 600
 
 # Run in redirect mode
 run-redirect:
@@ -110,7 +110,7 @@ help:
 	@echo "  build        - Build the application"
 	@echo "  build-all    - Build for all platforms and create zip files"
 	@echo "  run          - Run with default settings"
-	@echo "  run-config   - Run with custom configuration"
+	@echo "  run-config   - Run with custom mapping file"
 	@echo "  run-redirect - Run in redirect mode"
 	@echo "  run-auth     - Run with authentication"
 	@echo "  clean        - Clean build artifacts"

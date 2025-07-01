@@ -5,7 +5,7 @@ A high-performance WebDAV server that creates a virtual filesystem from remote H
 ## Features
 
 - 🌐 **WebDAV Protocol Support** - Full compatibility with WebDAV clients
-- 🗂️ **Virtual Filesystem** - Create directory structures from flat file configurations
+- 🗂️ **Virtual Filesystem** - Create directory structures from flat file mappings
 - 🚀 **High Performance** - Connection pooling, caching, and optimized HTTP handling
 - 🔐 **Authentication** - Optional Basic HTTP authentication
 - 📱 **Browser Support** - Beautiful web interface for directory browsing
@@ -14,7 +14,7 @@ A high-performance WebDAV server that creates a virtual filesystem from remote H
 - 🏥 **Health Checks** - Built-in health monitoring endpoint
 - 🛡️ **Security** - Input validation, path sanitization, and URL validation
 - 📊 **Logging** - Structured request logging with performance metrics
-- 🔧 **Configuration** - Environment variables and command-line configuration
+- 🔧 **Configuration** - Environment variables and command-line options
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ go run .
 
 ### Basic Usage
 
-1. **Create a configuration file** (`proxydav.json`):
+1. **Create a mapping file** (`proxydav.json`):
 
 ```json
 [
@@ -64,17 +64,17 @@ go run .
 2. **Start the server**:
 
 ```bash
-# Basic usage (config file is required)
-./proxydav -config proxydav.json
+# Basic usage (mapping file is required)
+./proxydav -mappings proxydav.json
 
-# Custom port and configuration
-./proxydav -port 9000 -config myfiles.json
+# Custom port and mappings
+./proxydav -port 9000 -mappings myfiles.json
 
 # With authentication
-./proxydav -config proxydav.json -auth -auth-user admin -auth-pass secret
+./proxydav -mappings proxydav.json -auth -auth-user admin -auth-pass secret
 
 # Redirect mode (faster for large files)
-./proxydav -config proxydav.json -redirect
+./proxydav -mappings proxydav.json -redirect
 ```
 
 3. **Access your files**:
@@ -89,7 +89,7 @@ go run .
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-port` | Port to listen on | 8080 |
-| `-config` | JSON configuration file (required) | none |
+| `-mappings` | JSON mapping file (required) | none |
 | `-cache-ttl` | Cache TTL in seconds | 3600 |
 | `-redirect` | Use redirects instead of proxying | false |
 | `-auth` | Enable basic authentication | false |
@@ -102,7 +102,7 @@ Environment variables override command-line flags:
 
 ```bash
 export PORT=9000
-export CONFIG_FILE=proxydav.json
+export MAPPING_FILE=proxydav.json
 export CACHE_TTL=600
 export USE_REDIRECT=true
 export AUTH_ENABLED=true
@@ -110,9 +110,9 @@ export AUTH_USER=admin
 export AUTH_PASS=secret
 ```
 
-### File Configuration Format
+### File Mapping Format
 
-The configuration file is a JSON array of file entries:
+The mapping file is a JSON array of file entries:
 
 ```json
 [

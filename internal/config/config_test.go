@@ -7,7 +7,7 @@ import (
 
 func TestConfigValidation(t *testing.T) {
 	// Create a temporary test file for valid tests
-	tmpFile, err := os.CreateTemp("", "test-config-*.json")
+	tmpFile, err := os.CreateTemp("", "test-mapping-*.json")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -27,54 +27,54 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "valid config",
 			config: Config{
-				Port:       8080,
-				ConfigFile: tmpFile.Name(),
-				CacheTTL:   3600,
+				Port:        8080,
+				MappingFile: tmpFile.Name(),
+				CacheTTL:    3600,
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid port - too low",
 			config: Config{
-				Port:       0,
-				ConfigFile: tmpFile.Name(),
-				CacheTTL:   3600,
+				Port:        0,
+				MappingFile: tmpFile.Name(),
+				CacheTTL:    3600,
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid port - too high",
 			config: Config{
-				Port:       99999,
-				ConfigFile: tmpFile.Name(),
-				CacheTTL:   3600,
+				Port:        99999,
+				MappingFile: tmpFile.Name(),
+				CacheTTL:    3600,
 			},
 			wantErr: true,
 		},
 		{
-			name: "empty config file",
+			name: "empty mapping file",
 			config: Config{
-				Port:       8080,
-				ConfigFile: "",
-				CacheTTL:   3600,
+				Port:        8080,
+				MappingFile: "",
+				CacheTTL:    3600,
 			},
 			wantErr: true,
 		},
 		{
-			name: "non-existent config file",
+			name: "non-existent mapping file",
 			config: Config{
-				Port:       8080,
-				ConfigFile: "non-existent.json",
-				CacheTTL:   3600,
+				Port:        8080,
+				MappingFile: "non-existent.json",
+				CacheTTL:    3600,
 			},
 			wantErr: true,
 		},
 		{
 			name: "negative cache TTL",
 			config: Config{
-				Port:       8080,
-				ConfigFile: tmpFile.Name(),
-				CacheTTL:   -1,
+				Port:        8080,
+				MappingFile: tmpFile.Name(),
+				CacheTTL:    -1,
 			},
 			wantErr: true,
 		},
@@ -82,7 +82,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "auth enabled without credentials",
 			config: Config{
 				Port:        8080,
-				ConfigFile:  tmpFile.Name(),
+				MappingFile: tmpFile.Name(),
 				CacheTTL:    3600,
 				AuthEnabled: true,
 			},
@@ -92,7 +92,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "auth enabled with credentials",
 			config: Config{
 				Port:        8080,
-				ConfigFile:  tmpFile.Name(),
+				MappingFile: tmpFile.Name(),
 				CacheTTL:    3600,
 				AuthEnabled: true,
 				AuthUser:    "user",
@@ -121,7 +121,7 @@ func TestLoadFileEntries(t *testing.T) {
 		}
 	]`
 
-	tmpFile, err := os.CreateTemp("", "test-config-*.json")
+	tmpFile, err := os.CreateTemp("", "test-mapping-*.json")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
