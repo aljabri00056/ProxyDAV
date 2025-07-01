@@ -21,7 +21,9 @@ func main() {
 	// Handle version flag
 	var showVersion bool
 	flag.BoolVar(&showVersion, "version", false, "Show version information")
-	flag.Parse()
+	
+	// Load configuration (this will parse all flags including version)
+	cfg := config.Load()
 
 	if showVersion {
 		fmt.Printf("ProxyDAV %s\n", version)
@@ -29,9 +31,6 @@ func main() {
 		fmt.Printf("Built: %s\n", date)
 		os.Exit(0)
 	}
-
-	// Load configuration
-	cfg := config.Load()
 
 	// Validate configuration
 	if err := cfg.Validate(); err != nil {

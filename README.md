@@ -42,7 +42,7 @@ go run .
 
 ### Basic Usage
 
-1. **Create a configuration file** (`files.json`):
+1. **Create a configuration file** (`proxydav.json`):
 
 ```json
 [
@@ -64,17 +64,17 @@ go run .
 2. **Start the server**:
 
 ```bash
-# Default settings (port 8080)
-./proxydav
+# Basic usage (config file is required)
+./proxydav -config proxydav.json
 
 # Custom port and configuration
 ./proxydav -port 9000 -config myfiles.json
 
 # With authentication
-./proxydav -auth -auth-user admin -auth-pass secret
+./proxydav -config proxydav.json -auth -auth-user admin -auth-pass secret
 
 # Redirect mode (faster for large files)
-./proxydav -redirect
+./proxydav -config proxydav.json -redirect
 ```
 
 3. **Access your files**:
@@ -89,7 +89,7 @@ go run .
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-port` | Port to listen on | 8080 |
-| `-config` | JSON configuration file | files.json |
+| `-config` | JSON configuration file (required) | none |
 | `-cache-ttl` | Cache TTL in seconds | 3600 |
 | `-redirect` | Use redirects instead of proxying | false |
 | `-auth` | Enable basic authentication | false |
@@ -101,13 +101,13 @@ go run .
 Environment variables override command-line flags:
 
 ```bash
-export PROXYDAV_PORT=9000
-export PROXYDAV_CONFIG=myfiles.json
-export PROXYDAV_CACHE_TTL=600
-export PROXYDAV_USE_REDIRECT=true
-export PROXYDAV_AUTH_ENABLED=true
-export PROXYDAV_AUTH_USER=admin
-export PROXYDAV_AUTH_PASS=secret
+export PORT=9000
+export CONFIG_FILE=proxydav.json
+export CACHE_TTL=600
+export USE_REDIRECT=true
+export AUTH_ENABLED=true
+export AUTH_USER=admin
+export AUTH_PASS=secret
 ```
 
 ### File Configuration Format

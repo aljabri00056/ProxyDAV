@@ -27,7 +27,7 @@ type Config struct {
 func Load() *Config {
 	config := &Config{
 		Port:         8080,
-		ConfigFile:   "files.json",
+		ConfigFile:   "",
 		CacheTTL:     3600,
 		UseRedirect:  false,
 		AuthEnabled:  false,
@@ -39,7 +39,7 @@ func Load() *Config {
 
 	// Parse command line flags
 	flag.IntVar(&config.Port, "port", config.Port, "Port to listen on")
-	flag.StringVar(&config.ConfigFile, "config", config.ConfigFile, "Path to JSON file with file mappings")
+	flag.StringVar(&config.ConfigFile, "config", config.ConfigFile, "Path to JSON file with file mappings (required)")
 	flag.IntVar(&config.CacheTTL, "cache-ttl", config.CacheTTL, "Cache TTL in seconds")
 	flag.BoolVar(&config.UseRedirect, "redirect", config.UseRedirect, "Use 302 redirects instead of proxying content")
 	flag.BoolVar(&config.AuthEnabled, "auth", config.AuthEnabled, "Enable HTTP Basic authentication")
@@ -108,7 +108,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("port must be between 1 and 65535")
 	}
 	if c.ConfigFile == "" {
-		return fmt.Errorf("config file path cannot be empty")
+		return fmt.Errorf("config file path is required, please specify with -config flag")
+	}
+	if _, err := os.Stat(c.ConfigFile); os.IsNotExist(err) {
+		return fmt.Errorf("config file does not exist: %s", c.ConfigFile)
 	}
 	if c.CacheTTL < 0 {
 		return fmt.Errorf("cache TTL cannot be negative")
