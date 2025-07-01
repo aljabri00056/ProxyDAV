@@ -112,11 +112,11 @@ jobs:
           # Create build directory
           mkdir -p dist
           
-          # Set binary name based on OS
+          # Set binary name based on OS (always use "proxydav" with proper extension)
           if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}"
+            BINARY_NAME="proxydav.exe"
           else
-            BINARY_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}"
+            BINARY_NAME="proxydav"
           fi
           
           # Build the binary with version info
@@ -124,6 +124,16 @@ jobs:
             -ldflags "-X main.version=${{ steps.get_version.outputs.VERSION }} -X main.commit=${{ github.sha }} -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ) -w -s" \
             -o "dist/${BINARY_NAME}" \
             ./cmd/proxydav
+          
+          # Create zip file with proper naming
+          cd dist
+          ZIP_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip"
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            # Remove .exe from suffix since we're adding it back
+            ZIP_NAME="proxydav-${{ steps.get_version.outputs.VERSION }}-${{ matrix.suffix }}.zip"
+          fi
+          zip "${ZIP_NAME}" "${BINARY_NAME}"
+          rm "${BINARY_NAME}"  # Remove the raw binary, keep only the zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -151,7 +161,7 @@ jobs:
       - name: Prepare release assets
         run: |
           # Flatten the artifact directory structure
-          find dist -name "proxydav-*" -type f -exec mv {} dist/ \;
+          find dist -name "proxydav-*.zip" -type f -exec mv {} dist/ \;
           
           # Remove empty directories
           find dist -type d -empty -delete
@@ -197,5 +207,5 @@ jobs:
           body_path: release_notes.txt
           draft: false
           prerelease: ${{ contains(steps.get_version.outputs.VERSION, '-') }}
-          files: dist/proxydav-*
+          files: dist/proxydav-*.zip
           token: ${{ secrets.GITHUB_TOKEN }}

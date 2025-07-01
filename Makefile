@@ -1,6 +1,6 @@
 # ProxyDAV Makefile
 
-.PHONY: build run clean test test-coverage help deps fmt vet
+.PHONY: build run clean test test-coverage help deps fmt vet build-all clean-dist
 
 # Version information
 VERSION ?= $(shell git describe --tags --exact-match 2>/dev/null || git rev-parse --short HEAD)
@@ -77,15 +77,44 @@ dev-tools:
 	@echo "Installing development tools..."
 	@go install golang.org/x/tools/cmd/goimports@latest
 
+# Cross-platform builds with zip packaging
+PLATFORMS = linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 freebsd/amd64
+
+build-all:
+	@echo "Building for all platforms..."
+	@mkdir -p dist
+	@for platform in $(PLATFORMS); do \
+		GOOS=$$(echo $$platform | cut -d'/' -f1); \
+		GOARCH=$$(echo $$platform | cut -d'/' -f2); \
+		if [ "$$GOOS" = "windows" ]; then \
+			BINARY_NAME="proxydav.exe"; \
+			ZIP_NAME="proxydav-$(VERSION)-$$GOOS-$$GOARCH.zip"; \
+		else \
+			BINARY_NAME="proxydav"; \
+			ZIP_NAME="proxydav-$(VERSION)-$$GOOS-$$GOARCH.zip"; \
+		fi; \
+		echo "Building $$GOOS/$$GOARCH..."; \
+		GOOS=$$GOOS GOARCH=$$GOARCH CGO_ENABLED=0 go build $(LDFLAGS) -o "dist/$$BINARY_NAME" ./cmd/proxydav; \
+		cd dist && zip "$$ZIP_NAME" "$$BINARY_NAME" && rm "$$BINARY_NAME" && cd ..; \
+	done
+	@echo "All builds completed in dist/ directory"
+
+# Clean distribution directory
+clean-dist:
+	@echo "Cleaning distribution directory..."
+	@rm -rf dist/
+
 # Show help
 help:
 	@echo "Available commands:"
 	@echo "  build        - Build the application"
+	@echo "  build-all    - Build for all platforms and create zip files"
 	@echo "  run          - Run with default settings"
 	@echo "  run-config   - Run with custom configuration"
 	@echo "  run-redirect - Run in redirect mode"
 	@echo "  run-auth     - Run with authentication"
 	@echo "  clean        - Clean build artifacts"
+	@echo "  clean-dist   - Clean distribution directory"
 	@echo "  test         - Run tests"
 	@echo "  test-coverage- Run tests with coverage report"
 	@echo "  deps         - Download dependencies"
