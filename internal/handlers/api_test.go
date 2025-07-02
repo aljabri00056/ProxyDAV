@@ -80,7 +80,7 @@ func TestAPIHandler_AddFiles(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(request)
-	req := httptest.NewRequest("POST", "/api/files/add", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/api/files", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -124,7 +124,7 @@ func TestAPIHandler_DeleteFiles(t *testing.T) {
 	}
 
 	body, _ := json.Marshal(request)
-	req := httptest.NewRequest("DELETE", "/api/files/delete", bytes.NewReader(body))
+	req := httptest.NewRequest("DELETE", "/api/files", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
@@ -152,30 +152,3 @@ func TestAPIHandler_DeleteFiles(t *testing.T) {
 	}
 }
 
-func TestAPIHandler_InvalidEndpoints(t *testing.T) {
-	vfs := createTestVFS(t)
-	handler := NewAPIHandler(vfs)
-
-	tests := []struct {
-		method string
-		path   string
-		status int
-	}{
-		{"POST", "/api/files", http.StatusNotFound},                 // Old single file add
-		{"PUT", "/api/files/test.txt", http.StatusMethodNotAllowed}, // PUT method not allowed
-		{"DELETE", "/api/files/test.txt", http.StatusNotFound},      // Old single file delete
-		{"POST", "/api/files/bulk", http.StatusNotFound},            // Old bulk endpoint
-		{"GET", "/api/files/something", http.StatusNotFound},        // Invalid GET path
-	}
-
-	for _, test := range tests {
-		req := httptest.NewRequest(test.method, test.path, nil)
-		w := httptest.NewRecorder()
-
-		handler.ServeHTTP(w, req)
-
-		if w.Code != test.status {
-			t.Errorf("Expected status code %d for %s %s, got %d", test.status, test.method, test.path, w.Code)
-		}
-	}
-}

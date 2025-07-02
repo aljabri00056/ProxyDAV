@@ -54,7 +54,7 @@ Returns a list of all files currently managed by the server.
 ```
 
 ### 2. Add Files
-**POST** `/api/files/add`
+**POST** `/api/files`
 
 Adds multiple files to the virtual filesystem.
 
@@ -118,7 +118,7 @@ Adds multiple files to the virtual filesystem.
 ```
 
 ### 3. Delete Files
-**DELETE** `/api/files/delete`
+**DELETE** `/api/files`
 
 Removes multiple files from the virtual filesystem.
 
@@ -196,7 +196,7 @@ curl http://localhost:8080/api/files
 
 #### Add files
 ```bash
-curl -X POST http://localhost:8080/api/files/add \
+curl -X POST http://localhost:8080/api/files \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
@@ -208,7 +208,7 @@ curl -X POST http://localhost:8080/api/files/add \
 
 #### Delete files
 ```bash
-curl -X DELETE http://localhost:8080/api/files/delete \
+curl -X DELETE http://localhost:8080/api/files \
   -H "Content-Type: application/json" \
   -d '{
     "files": [
@@ -222,7 +222,7 @@ curl -X DELETE http://localhost:8080/api/files/delete \
 If authentication is enabled, include basic auth credentials:
 
 ```bash
-curl -u username:password -X POST http://localhost:8080/api/files/add \
+curl -u username:password -X POST http://localhost:8080/api/files \
   -H "Content-Type: application/json" \
   -d '{
     "files": [

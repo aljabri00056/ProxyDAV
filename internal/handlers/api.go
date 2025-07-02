@@ -51,28 +51,18 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(pathParts) != 2 {
+		h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
+		return
+	}
+
 	switch r.Method {
 	case "GET":
-		// Only allow GET /api/files
-		if len(pathParts) == 2 {
-			h.handleListFiles(w, r)
-		} else {
-			h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
-		}
+		h.handleListFiles(w, r)
 	case "POST":
-		// Only allow POST /api/files/add
-		if len(pathParts) == 3 && pathParts[2] == "add" {
-			h.handleAddFiles(w, r)
-		} else {
-			h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
-		}
+		h.handleAddFiles(w, r)
 	case "DELETE":
-		// Only allow DELETE /api/files/delete
-		if len(pathParts) == 3 && pathParts[2] == "delete" {
-			h.handleDeleteFiles(w, r)
-		} else {
-			h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
-		}
+		h.handleDeleteFiles(w, r)
 	default:
 		h.sendError(w, http.StatusMethodNotAllowed, "Method not allowed")
 	}
@@ -90,7 +80,7 @@ func (h *APIHandler) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	h.sendSuccess(w, http.StatusOK, "Files retrieved successfully", response)
 }
 
-// POST /api/files/add - add multiple files
+// POST /api/files - add multiple files
 func (h *APIHandler) handleAddFiles(w http.ResponseWriter, r *http.Request) {
 	var request AddFilesRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -143,7 +133,7 @@ func (h *APIHandler) handleAddFiles(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// DELETE /api/files/delete - delete multiple files
+// DELETE /api/files - delete multiple files
 func (h *APIHandler) handleDeleteFiles(w http.ResponseWriter, r *http.Request) {
 	var request DeleteFilesRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
