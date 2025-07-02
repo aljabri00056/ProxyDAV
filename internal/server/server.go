@@ -211,16 +211,7 @@ func (s *Server) Start() error {
 	log.Printf("   🔗 WebDAV Endpoint: http://localhost:%d/", s.config.Port)
 	log.Printf("   🛠️  API Endpoint: http://localhost:%d/api/", s.config.Port)
 	log.Printf("   🎛️  Admin Panel: http://localhost:%d/admin/", s.config.Port)
-	log.Printf("   🩺 Health Check: http://localhost:%d/api/health", s.config.Port)
 	log.Println()
-	if fileCount == 0 {
-		log.Println("💡 Tip: Your virtual filesystem is empty. Add files using:")
-		log.Printf("   curl -X POST http://localhost:%d/api/files \\", s.config.Port)
-		log.Println("     -H \"Content-Type: application/json\" \\")
-		log.Println("     -d '{\"path\":\"/example.pdf\",\"url\":\"https://example.com/file.pdf\"}'")
-	} else if fileCount > 0 {
-		log.Printf("📚 %d file(s) loaded and ready to serve", fileCount)
-	}
 	log.Println("🛑 Press Ctrl+C to stop the server")
 	log.Println()
 

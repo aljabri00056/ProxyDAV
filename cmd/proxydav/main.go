@@ -11,7 +11,6 @@ import (
 	"proxydav/internal/server"
 )
 
-// Build information (set by linker flags during build)
 var (
 	version = "dev"
 	commit  = "unknown"
@@ -19,10 +18,12 @@ var (
 )
 
 func main() {
-	var showVersion bool
-	flag.BoolVar(&showVersion, "version", false, "Show version information")
+	fs := flag.NewFlagSet("proxydav", flag.ExitOnError)
 
-	cfg := config.Load()
+	var showVersion bool
+	fs.BoolVar(&showVersion, "version", false, "Show version information")
+
+	cfg := config.Load(fs)
 
 	if showVersion {
 		fmt.Println()

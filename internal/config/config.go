@@ -21,23 +21,23 @@ type Config struct {
 	DataDir     string `json:"data_dir"`
 }
 
-func Load() *Config {
+func Load(fs *flag.FlagSet) *Config {
 	config := &Config{
 		Port:        8080,
+		DataDir:     "./proxydavData",
 		UseRedirect: false,
 		AuthEnabled: false,
 		AuthUser:    "",
 		AuthPass:    "",
-		DataDir:     "./proxydavData",
 	}
 
-	flag.IntVar(&config.Port, "port", config.Port, "Port to listen on")
-	flag.BoolVar(&config.UseRedirect, "redirect", config.UseRedirect, "Use 302 redirects instead of proxying content")
-	flag.BoolVar(&config.AuthEnabled, "auth", config.AuthEnabled, "Enable HTTP Basic authentication")
-	flag.StringVar(&config.AuthUser, "user", config.AuthUser, "Username for authentication")
-	flag.StringVar(&config.AuthPass, "pass", config.AuthPass, "Password for authentication")
-	flag.StringVar(&config.DataDir, "data-dir", config.DataDir, "Directory for persistent data storage")
-	flag.Parse()
+	fs.IntVar(&config.Port, "port", config.Port, "Port to listen on")
+	fs.StringVar(&config.DataDir, "data-dir", config.DataDir, "Directory for persistent data storage")
+	fs.BoolVar(&config.UseRedirect, "redirect", config.UseRedirect, "Use 302 redirects instead of proxying content")
+	fs.BoolVar(&config.AuthEnabled, "auth", config.AuthEnabled, "Enable HTTP Basic authentication")
+	fs.StringVar(&config.AuthUser, "user", config.AuthUser, "Username for authentication")
+	fs.StringVar(&config.AuthPass, "pass", config.AuthPass, "Password for authentication")
+	fs.Parse(os.Args[1:])
 
 	return loadFromEnv(config)
 }
@@ -52,7 +52,6 @@ func Reload() *Config {
 		DataDir:     "./proxydavData",
 	}
 
-	// Apply parsed flag values (flags already exist from initial Load())
 	if f := flag.Lookup("port"); f != nil {
 		if p, err := strconv.Atoi(f.Value.String()); err == nil {
 			config.Port = p
@@ -78,7 +77,6 @@ func Reload() *Config {
 }
 
 func loadFromEnv(config *Config) *Config {
-	// Override with environment variables
 	if port := os.Getenv("PORT"); port != "" {
 		if p, err := strconv.Atoi(port); err == nil {
 			config.Port = p
