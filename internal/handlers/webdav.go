@@ -219,12 +219,6 @@ func (h *WebDAVHandler) getFileMetadata(url string) *types.FileMetadata {
 func (h *WebDAVHandler) handleGetHead(w http.ResponseWriter, r *http.Request) {
 	requestPath := r.URL.Path
 
-	// Handle browser requests
-	if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		h.handleBrowserRequest(w, r)
-		return
-	}
-
 	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
 	item, exists := h.vfs.GetItem(normalizedPath)
 	if !exists {
@@ -290,10 +284,4 @@ func (h *WebDAVHandler) proxyContent(w http.ResponseWriter, r *http.Request, url
 			log.Printf("Error copying response body: %v", err)
 		}
 	}
-}
-
-// handleBrowserRequest handles browser requests for directory listing
-func (h *WebDAVHandler) handleBrowserRequest(w http.ResponseWriter, r *http.Request) {
-	// This will be implemented in the browser handler
-	http.Error(w, "Browser interface not implemented in this handler", http.StatusNotImplemented)
 }

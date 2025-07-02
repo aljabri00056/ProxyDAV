@@ -8,7 +8,6 @@ WebDAV server that creates a virtual filesystem from remote HTTP/HTTPS resources
 - Virtual filesystem from remote files  
 - REST API for file management
 - Persistent storage with BadgerDB
-- Web browser interface
 - Optional authentication
 - Proxy or redirect modes
 

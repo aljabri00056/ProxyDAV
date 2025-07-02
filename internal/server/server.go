@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -19,13 +18,12 @@ import (
 )
 
 type Server struct {
-	config         *config.Config
-	vfs            *filesystem.VirtualFS
-	store          *storage.PersistentStore
-	httpServer     *http.Server
-	webdavHandler  *handlers.WebDAVHandler
-	browserHandler *handlers.BrowserHandler
-	apiHandler     *handlers.APIHandler
+	config        *config.Config
+	vfs           *filesystem.VirtualFS
+	store         *storage.PersistentStore
+	httpServer    *http.Server
+	webdavHandler *handlers.WebDAVHandler
+	apiHandler    *handlers.APIHandler
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -45,17 +43,15 @@ func New(cfg *config.Config) (*Server, error) {
 	log.Println("🗂️  Virtual filesystem initialized")
 
 	webdavHandler := handlers.NewWebDAVHandler(vfs, store, cfg.UseRedirect)
-	browserHandler := handlers.NewBrowserHandler(vfs)
 	apiHandler := handlers.NewAPIHandler(vfs)
 
 	mux := http.NewServeMux()
 	server := &Server{
-		config:         cfg,
-		vfs:            vfs,
-		store:          store,
-		webdavHandler:  webdavHandler,
-		browserHandler: browserHandler,
-		apiHandler:     apiHandler,
+		config:        cfg,
+		vfs:           vfs,
+		store:         store,
+		webdavHandler: webdavHandler,
+		apiHandler:    apiHandler,
 		httpServer: &http.Server{
 			Addr:         fmt.Sprintf(":%d", cfg.Port),
 			Handler:      mux,
@@ -81,21 +77,11 @@ func (s *Server) setupRoutes(mux *http.ServeMux) {
 	}
 	mux.HandleFunc("/api/", apiHandler)
 
-	handler := s.loggingMiddleware(s.routeRequest)
+	webdavHandler := s.loggingMiddleware(s.webdavHandler.ServeHTTP)
 	if s.config.AuthEnabled {
-		handler = s.basicAuthMiddleware(handler)
+		webdavHandler = s.basicAuthMiddleware(webdavHandler)
 	}
-
-	mux.HandleFunc("/", handler)
-}
-
-func (s *Server) routeRequest(w http.ResponseWriter, r *http.Request) {
-	// Route based on Accept header and method
-	if r.Method == "GET" && strings.Contains(r.Header.Get("Accept"), "text/html") {
-		s.browserHandler.ServeHTTP(w, r)
-	} else {
-		s.webdavHandler.ServeHTTP(w, r)
-	}
+	mux.HandleFunc("/", webdavHandler)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +180,6 @@ func (s *Server) Start() error {
 
 	log.Println("✅ ProxyDAV server started successfully!")
 	log.Printf("🌍 Server URLs:")
-	log.Printf("   📱 Web Interface: http://localhost:%d/", s.config.Port)
 	log.Printf("   🔗 WebDAV Endpoint: webdav://localhost:%d/", s.config.Port)
 	log.Printf("   🛠️  API Endpoint: http://localhost:%d/api/", s.config.Port)
 	log.Printf("   🩺 Health Check: http://localhost:%d/health", s.config.Port)
