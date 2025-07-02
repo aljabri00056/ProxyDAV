@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -17,6 +18,9 @@ import (
 	"proxydav/internal/storage"
 )
 
+// ErrRestart is returned when the server should restart
+var ErrRestart = errors.New("server restart requested")
+
 type Server struct {
 	config        *config.Config
 	vfs           *filesystem.VirtualFS
@@ -24,6 +28,9 @@ type Server struct {
 	httpServer    *http.Server
 	webdavHandler *handlers.WebDAVHandler
 	apiHandler    *handlers.APIHandler
+	adminHandler  *handlers.AdminHandler
+	restartChan   chan bool // Channel to signal restart
+	shutdownChan  chan bool // Channel to signal shutdown
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -33,6 +40,12 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	log.Printf("💾 Initialized persistent storage in: %s", cfg.DataDir)
+
+	// Try to load saved configuration from database
+	if savedConfig, err := config.LoadFromStore(store); err == nil && savedConfig != nil {
+		log.Printf("📋 Loaded configuration from database")
+		cfg = savedConfig
+	}
 
 	vfs, err := filesystem.New(store)
 	if err != nil {
@@ -59,7 +72,13 @@ func New(cfg *config.Config) (*Server, error) {
 			WriteTimeout: 30 * time.Second,
 			IdleTimeout:  60 * time.Second,
 		},
+		restartChan:  make(chan bool),
+		shutdownChan: make(chan bool),
 	}
+
+	// Create admin handler with server as config updater
+	adminHandler := handlers.NewAdminHandler(vfs, store, cfg, server)
+	server.adminHandler = adminHandler
 
 	server.setupRoutes(mux)
 
@@ -69,17 +88,16 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 func (s *Server) setupRoutes(mux *http.ServeMux) {
-	apiHandler := s.loggingMiddleware(s.apiHandler.ServeHTTP)
-	if s.config.AuthEnabled {
-		apiHandler = s.basicAuthMiddleware(apiHandler)
-	}
+	// Use dynamic middleware that checks current config state
+	adminHandler := s.loggingMiddleware(s.dynamicAuthMiddleware(s.adminHandler.ServeHTTP))
+	mux.HandleFunc("/admin/", adminHandler)
+
+	apiHandler := s.loggingMiddleware(s.dynamicAuthMiddleware(s.apiHandler.ServeHTTP))
 	mux.HandleFunc("/api/", apiHandler)
 	mux.HandleFunc("/api/health", s.handleHealth)
 
-	webdavHandler := s.loggingMiddleware(s.webdavHandler.ServeHTTP)
-	if s.config.AuthEnabled {
-		webdavHandler = s.basicAuthMiddleware(webdavHandler)
-	}
+	// WebDAV routes (catch-all, should be last)
+	webdavHandler := s.loggingMiddleware(s.dynamicAuthMiddleware(s.webdavHandler.ServeHTTP))
 	mux.HandleFunc("/", webdavHandler)
 }
 
@@ -109,6 +127,17 @@ func (s *Server) basicAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		next(w, r)
+	}
+}
+
+// dynamicAuthMiddleware applies authentication only when enabled in current config
+func (s *Server) dynamicAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.config.AuthEnabled {
+			s.basicAuthMiddleware(next)(w, r)
+		} else {
+			next(w, r)
+		}
 	}
 }
 
@@ -181,6 +210,7 @@ func (s *Server) Start() error {
 	log.Printf("🌍 Server URLs:")
 	log.Printf("   🔗 WebDAV Endpoint: http://localhost:%d/", s.config.Port)
 	log.Printf("   🛠️  API Endpoint: http://localhost:%d/api/", s.config.Port)
+	log.Printf("   🎛️  Admin Panel: http://localhost:%d/admin/", s.config.Port)
 	log.Printf("   🩺 Health Check: http://localhost:%d/api/health", s.config.Port)
 	log.Println()
 	if fileCount == 0 {
@@ -202,9 +232,20 @@ func (s *Server) waitForShutdown() error {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	<-quit
-	log.Println()
-	log.Println("🛑 Shutdown signal received. Gracefully shutting down...")
+	var isRestart bool
+
+	select {
+	case <-quit:
+		log.Println()
+		log.Println("🛑 Shutdown signal received. Gracefully shutting down...")
+	case <-s.restartChan:
+		log.Println()
+		log.Println("🔄 Restart signal received. Gracefully restarting...")
+		isRestart = true
+	case <-s.shutdownChan:
+		log.Println()
+		log.Println("🛑 Admin shutdown signal received. Gracefully shutting down...")
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -216,6 +257,11 @@ func (s *Server) waitForShutdown() error {
 
 	if err := s.store.Close(); err != nil {
 		log.Printf("⚠️  Error closing persistent store: %v", err)
+	}
+
+	if isRestart {
+		log.Println("✅ Server shutdown complete. Preparing to restart...")
+		return ErrRestart
 	}
 
 	log.Println("✅ Server shutdown complete. Goodbye!")
@@ -231,4 +277,56 @@ func (s *Server) Stop() error {
 	}
 
 	return s.store.Close()
+}
+
+// UpdateConfig applies configuration changes that can take effect without restart
+func (s *Server) UpdateConfig(newConfig *config.Config) error {
+	if err := newConfig.Validate(); err != nil {
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	s.config = newConfig
+
+	s.webdavHandler.SetUseRedirect(newConfig.UseRedirect)
+
+	if err := newConfig.SaveToStore(s.store); err != nil {
+		log.Printf("⚠️  Warning: Failed to save configuration to database: %v", err)
+	} else {
+		log.Printf("💾 Configuration saved to database")
+	}
+
+	log.Printf("🔄 Configuration updated successfully")
+	log.Printf("   🔄 Redirect Mode: %v", newConfig.UseRedirect)
+	log.Printf("   🔐 Authentication: %v", newConfig.AuthEnabled)
+	if newConfig.AuthEnabled {
+		log.Printf("   👤 Username: %s", newConfig.AuthUser)
+	}
+
+	return nil
+}
+
+// GetConfig returns a copy of the current configuration
+func (s *Server) GetConfig() *config.Config {
+	configCopy := *s.config
+	return &configCopy
+}
+
+// Restart signals the server to restart gracefully
+func (s *Server) Restart() error {
+	select {
+	case s.restartChan <- true:
+		return nil
+	default:
+		return errors.New("restart already in progress")
+	}
+}
+
+// Shutdown signals the server to shutdown gracefully via admin panel
+func (s *Server) Shutdown() error {
+	select {
+	case s.shutdownChan <- true:
+		return nil
+	default:
+		return errors.New("shutdown already in progress")
+	}
 }

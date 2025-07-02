@@ -184,3 +184,50 @@ func (s *PersistentStore) CountFileEntries() (int, error) {
 
 	return count, nil
 }
+
+// GetConfig retrieves the configuration from the database
+func (s *PersistentStore) GetConfig() (map[string]interface{}, error) {
+	var config map[string]interface{}
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		key := []byte("config:main")
+		item, err := txn.Get(key)
+		if err != nil {
+			return err
+		}
+
+		return item.Value(func(val []byte) error {
+			return json.Unmarshal(val, &config)
+		})
+	})
+
+	if err == badger.ErrKeyNotFound {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get config: %w", err)
+	}
+
+	return config, nil
+}
+
+// SetConfig saves the configuration to the database
+func (s *PersistentStore) SetConfig(config map[string]interface{}) error {
+	data, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	return s.db.Update(func(txn *badger.Txn) error {
+		key := []byte("config:main")
+		return txn.Set(key, data)
+	})
+}
+
+// DeleteConfig removes the configuration from the database
+func (s *PersistentStore) DeleteConfig() error {
+	return s.db.Update(func(txn *badger.Txn) error {
+		key := []byte("config:main")
+		return txn.Delete(key)
+	})
+}

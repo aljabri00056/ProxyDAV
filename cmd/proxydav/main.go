@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -42,13 +43,26 @@ func main() {
 
 	log.Println("🚀 Starting ProxyDAV server...")
 
-	srv, err := server.New(cfg)
-	if err != nil {
-		log.Fatalf("❌ Failed to create server: %v", err)
-	}
+	for {
+		srv, err := server.New(cfg)
+		if err != nil {
+			log.Fatalf("❌ Failed to create server: %v", err)
+		}
 
-	if err := srv.Start(); err != nil {
-		log.Fatalf("❌ Server failed: %v", err)
-		os.Exit(1)
+		err = srv.Start()
+		if err == nil {
+			// Normal shutdown
+			break
+		} else if errors.Is(err, server.ErrRestart) {
+			log.Println("🔄 Restarting server...")
+			// Reload configuration for restart
+			cfg = config.Reload()
+			if err := cfg.Validate(); err != nil {
+				log.Fatalf("❌ Configuration validation failed on restart: %v", err)
+			}
+			continue
+		} else {
+			log.Fatalf("❌ Server failed: %v", err)
+		}
 	}
 }

@@ -37,6 +37,11 @@ func NewWebDAVHandler(vfs *filesystem.VirtualFS, store *storage.PersistentStore,
 	}
 }
 
+// SetUseRedirect updates the redirect behavior dynamically
+func (h *WebDAVHandler) SetUseRedirect(useRedirect bool) {
+	h.useRedirect = useRedirect
+}
+
 func (h *WebDAVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "OPTIONS":
