@@ -8,6 +8,7 @@ import (
 
 	"proxydav/internal/config"
 	"proxydav/internal/server"
+	"proxydav/pkg/types"
 )
 
 // Build information (set by linker flags during build)
@@ -37,17 +38,9 @@ func main() {
 		log.Fatalf("Configuration validation failed: %v", err)
 	}
 
-	// Load file entries
-	files, err := config.LoadFileEntries(cfg.MappingFile)
-	if err != nil {
-		log.Fatalf("Failed to load file entries: %v", err)
-	}
-
-	if len(files) == 0 {
-		log.Println("Warning: No files configured")
-	} else {
-		log.Printf("Loaded %d file entries from %s", len(files), cfg.MappingFile)
-	}
+	// Start with empty filesystem - files can only be added via API
+	files := []types.FileEntry{}
+	log.Println("Starting with empty filesystem. Use the REST API to add files.")
 
 	// Create and start server
 	srv := server.New(cfg, files)

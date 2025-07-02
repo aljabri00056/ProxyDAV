@@ -5,9 +5,10 @@ A high-performance WebDAV server that creates a virtual filesystem from remote H
 ## Features
 
 - 🌐 **WebDAV Protocol Support** - Full compatibility with WebDAV clients
-- 🗂️ **Virtual Filesystem** - Create directory structures from flat file mappings
+- 🗂️ **Virtual Filesystem** - Create directory structures from remote files
 - 🚀 **High Performance** - Connection pooling, caching, and optimized HTTP handling
-- 🔐 **Authentication** - Optional Basic HTTP authentication
+- � **REST API** - Complete CRUD API for dynamic file management
+- �🔐 **Authentication** - Optional Basic HTTP authentication
 - 📱 **Browser Support** - Beautiful web interface for directory browsing
 - ⚡ **Caching** - Intelligent metadata caching with TTL
 - 🔄 **Two Modes** - Proxy mode (stream files) or redirect mode (302 redirects)
@@ -15,6 +16,8 @@ A high-performance WebDAV server that creates a virtual filesystem from remote H
 - 🛡️ **Security** - Input validation, path sanitization, and URL validation
 - 📊 **Logging** - Structured request logging with performance metrics
 - 🔧 **Configuration** - Environment variables and command-line options
+- 📝 **Dynamic Management** - Add, update, or remove files via REST API
+- 🔄 **Bulk Operations** - Import/export file mappings via JSON
 
 ## Quick Start
 
@@ -42,45 +45,50 @@ go run .
 
 ### Basic Usage
 
-1. **Create a mapping file** (`proxydav.json`):
-
-```json
-[
-    {
-        "path": "/documents/example.pdf",
-        "url": "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"
-    },
-    {
-        "path": "/images/sample.jpg",
-        "url": "https://via.placeholder.com/800x600.jpg"
-    },
-    {
-        "path": "/nested/folder/deep/file.txt",
-        "url": "https://www.w3.org/TR/PNG/iso_8859-1.txt"
-    }
-]
-```
-
-2. **Start the server**:
+1. **Start the server**:
 
 ```bash
-# Basic usage (mapping file is required)
-./proxydav -mappings proxydav.json
+./proxydav
+```
 
-# Custom port and mappings
-./proxydav -port 9000 -mappings myfiles.json
+2. **Add files via API**:
 
-# With authentication
-./proxydav -mappings proxydav.json -auth -auth-user admin -auth-pass secret
+```bash
+# Add a single file
+curl -X POST http://localhost:8080/api/files \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/documents/example.pdf","url":"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"}'
 
-# Redirect mode (faster for large files)
-./proxydav -mappings proxydav.json -redirect
+# Add multiple files
+curl -X POST http://localhost:8080/api/files/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "add",
+    "files": [
+      {"path":"/documents/example.pdf","url":"https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf"},
+      {"path":"/images/sample.jpg","url":"https://via.placeholder.com/800x600.jpg"}
+    ]
+  }'
 ```
 
 3. **Access your files**:
    - **Web Browser**: http://localhost:8080/
    - **WebDAV Client**: webdav://localhost:8080/
+   - **REST API**: http://localhost:8080/api/files
    - **Health Check**: http://localhost:8080/health
+
+#### Advanced Usage
+
+```bash
+# Custom port
+./proxydav -port 9000
+
+# With authentication
+./proxydav -auth -user admin -pass secret
+
+# Redirect mode (faster for large files)
+./proxydav -redirect
+```
 
 ## Configuration
 
@@ -89,12 +97,11 @@ go run .
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-port` | Port to listen on | 8080 |
-| `-mappings` | JSON mapping file (required) | none |
 | `-cache-ttl` | Cache TTL in seconds | 3600 |
 | `-redirect` | Use redirects instead of proxying | false |
 | `-auth` | Enable basic authentication | false |
-| `-auth-user` | Basic auth username | "" |
-| `-auth-pass` | Basic auth password | "" |
+| `-user` | Basic auth username | "" |
+| `-pass` | Basic auth password | "" |
 
 ### Environment Variables
 
@@ -102,7 +109,6 @@ Environment variables override command-line flags:
 
 ```bash
 export PORT=9000
-export MAPPING_FILE=proxydav.json
 export CACHE_TTL=600
 export USE_REDIRECT=true
 export AUTH_ENABLED=true
@@ -110,24 +116,40 @@ export AUTH_USER=admin
 export AUTH_PASS=secret
 ```
 
-### File Mapping Format
+### File Management
 
-The mapping file is a JSON array of file entries:
+The only way to add files to ProxyDAV is through the REST API. This ensures a consistent, programmatic interface for all file operations.
 
-```json
-[
-    {
-        "path": "/virtual/path/to/file.ext",
-        "url": "https://remote-server.com/actual/file.ext"
-    }
-]
+```bash
+# List all files
+curl http://localhost:8080/api/files
+
+# Add a file
+curl -X POST http://localhost:8080/api/files \
+  -H "Content-Type: application/json" \
+  -d '{"path":"/docs/file.pdf","url":"https://example.com/file.pdf"}'
+
+# Update a file
+curl -X PUT http://localhost:8080/api/files/docs%2Ffile.pdf \
+  -H "Content-Type: application/json" \
+  -d '{"url":"https://example.com/updated-file.pdf"}'
+
+# Delete a file
+curl -X DELETE http://localhost:8080/api/files/docs%2Ffile.pdf
+
+# Bulk operations
+curl -X POST http://localhost:8080/api/files/bulk \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "add",
+    "files": [
+      {"path":"/file1.pdf","url":"https://example.com/file1.pdf"},
+      {"path":"/file2.pdf","url":"https://example.com/file2.pdf"}
+    ]
+  }'
 ```
 
-**Requirements:**
-- `path`: Virtual path in the filesystem (must start with `/`)
-- `url`: Remote HTTP/HTTPS URL to the actual file
-- URLs must use `http://` or `https://` schemes
-- Paths cannot contain `..` sequences
+See [API.md](API.md) for complete API documentation.
 
 
 ### Redirect Mode
@@ -141,6 +163,18 @@ Redirect mode returns HTTP 302 redirects instead of proxying files. This is more
 
 ## API Endpoints
 
+### File Management API
+
+Complete REST API for managing files dynamically:
+
+- **GET** `/api/files` - List all files
+- **POST** `/api/files` - Add a single file
+- **PUT** `/api/files/{path}` - Update a file
+- **DELETE** `/api/files/{path}` - Delete a file
+- **POST** `/api/files/bulk` - Bulk add/remove operations
+
+See [API.md](API.md) for detailed API documentation with examples.
+
 ### Health Check
 
 ```http
@@ -150,9 +184,8 @@ GET /health
 Response:
 ```json
 {
-    "status": "ok",
-    "timestamp": 1672531200,
-    "version": "1.0.0"
+    "status": "healthy",
+    "cache_size": 150
 }
 ```
 

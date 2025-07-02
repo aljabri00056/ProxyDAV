@@ -27,6 +27,7 @@ type Server struct {
 	httpServer     *http.Server
 	webdavHandler  *handlers.WebDAVHandler
 	browserHandler *handlers.BrowserHandler
+	apiHandler     *handlers.APIHandler
 }
 
 // New creates a new ProxyDAV server
@@ -41,6 +42,7 @@ func New(cfg *config.Config, files []types.FileEntry) *Server {
 	// Create handlers
 	webdavHandler := handlers.NewWebDAVHandler(vfs, metadataCache, cfg.UseRedirect)
 	browserHandler := handlers.NewBrowserHandler(vfs)
+	apiHandler := handlers.NewAPIHandler(vfs)
 
 	// Create HTTP server
 	mux := http.NewServeMux()
@@ -50,6 +52,7 @@ func New(cfg *config.Config, files []types.FileEntry) *Server {
 		cache:          metadataCache,
 		webdavHandler:  webdavHandler,
 		browserHandler: browserHandler,
+		apiHandler:     apiHandler,
 		httpServer: &http.Server{
 			Addr:         fmt.Sprintf(":%d", cfg.Port),
 			Handler:      mux,
@@ -69,6 +72,13 @@ func New(cfg *config.Config, files []types.FileEntry) *Server {
 func (s *Server) setupRoutes(mux *http.ServeMux) {
 	// Health check endpoint
 	mux.HandleFunc(s.config.HealthPath, s.handleHealth)
+
+	// API endpoints for file management
+	apiHandler := s.loggingMiddleware(s.apiHandler.ServeHTTP)
+	if s.config.AuthEnabled {
+		apiHandler = s.basicAuthMiddleware(apiHandler)
+	}
+	mux.HandleFunc("/api/", apiHandler)
 
 	// Main handler with middleware
 	handler := s.loggingMiddleware(s.routeRequest)
