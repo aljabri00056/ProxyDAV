@@ -72,7 +72,7 @@ export AUTH_PASS=secret
 ### Health Check
 
 ```http
-GET /health
+GET /api/health
 ```
 
 See [API.md](API.md) for detailed documentation.

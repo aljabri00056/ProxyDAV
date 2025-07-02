@@ -69,13 +69,12 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 func (s *Server) setupRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/health", s.handleHealth)
-
 	apiHandler := s.loggingMiddleware(s.apiHandler.ServeHTTP)
 	if s.config.AuthEnabled {
 		apiHandler = s.basicAuthMiddleware(apiHandler)
 	}
 	mux.HandleFunc("/api/", apiHandler)
+	mux.HandleFunc("/api/health", s.handleHealth)
 
 	webdavHandler := s.loggingMiddleware(s.webdavHandler.ServeHTTP)
 	if s.config.AuthEnabled {
@@ -162,7 +161,7 @@ func (s *Server) Start() error {
 	if s.config.AuthEnabled {
 		log.Printf("   👤 Username: %s", s.config.AuthUser)
 	}
-	log.Printf("   🩺 Health Endpoint: /health")
+	log.Printf("   🩺 Health Endpoint: /api/health")
 	if fileCount >= 0 {
 		if fileCount == 0 {
 			log.Printf("   📄 Stored Files: %d (database is empty)", fileCount)
@@ -182,7 +181,7 @@ func (s *Server) Start() error {
 	log.Printf("🌍 Server URLs:")
 	log.Printf("   🔗 WebDAV Endpoint: webdav://localhost:%d/", s.config.Port)
 	log.Printf("   🛠️  API Endpoint: http://localhost:%d/api/", s.config.Port)
-	log.Printf("   🩺 Health Check: http://localhost:%d/health", s.config.Port)
+	log.Printf("   🩺 Health Check: http://localhost:%d/api/health", s.config.Port)
 	log.Println()
 	if fileCount == 0 {
 		log.Println("💡 Tip: Your virtual filesystem is empty. Add files using:")
