@@ -26,9 +26,13 @@ curl -sSL aj-get.vercel.app/ProxyDAV | bash
 ./proxydav
 
 # Add files
-curl -X POST http://localhost:8080/api/files \
+curl -X POST http://localhost:8080/api/files/add \
   -H "Content-Type: application/json" \
-  -d '{"path":"/docs/file.pdf","url":"https://example.com/file.pdf"}'
+  -d '{
+    "files": [
+      {"path":"/docs/file.pdf","url":"https://example.com/file.pdf"}
+    ]
+  }'
 
 # Access via browser or WebDAV client
 # Browser: http://localhost:8080/
@@ -63,11 +67,9 @@ export AUTH_PASS=secret
 
 ### File Management
 
-- `GET /api/files` - List files
-- `POST /api/files` - Add file
-- `PUT /api/files/{path}` - Update file
-- `DELETE /api/files/{path}` - Delete file
-- `POST /api/files/bulk` - Bulk operations
+- `GET /api/files` - List all files
+- `POST /api/files/add` - Add multiple files
+- `DELETE /api/files/delete` - Delete multiple files
 
 ### Health Check
 

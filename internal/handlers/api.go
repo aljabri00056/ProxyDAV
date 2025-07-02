@@ -28,9 +28,12 @@ type APIResponse struct {
 	Error   string      `json:"error,omitempty"`
 }
 
-type BulkOperation struct {
-	Operation string            `json:"operation"` // "add" or "remove"
-	Files     []types.FileEntry `json:"files"`
+type AddFilesRequest struct {
+	Files []types.FileEntry `json:"files"`
+}
+
+type DeleteFilesRequest struct {
+	Files []types.FileEntry `json:"files"`
 }
 
 type FileListResponse struct {
@@ -50,24 +53,25 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case "GET":
-		h.handleListFiles(w, r)
-	case "POST":
-		if len(pathParts) >= 3 && pathParts[2] == "bulk" {
-			h.handleBulkOperation(w, r)
+		// Only allow GET /api/files
+		if len(pathParts) == 2 {
+			h.handleListFiles(w, r)
 		} else {
-			h.handleAddFile(w, r)
+			h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
 		}
-	case "PUT":
-		if len(pathParts) >= 3 {
-			h.handleUpdateFile(w, r, strings.Join(pathParts[2:], "/"))
+	case "POST":
+		// Only allow POST /api/files/add
+		if len(pathParts) == 3 && pathParts[2] == "add" {
+			h.handleAddFiles(w, r)
 		} else {
-			h.sendError(w, http.StatusBadRequest, "File path required for PUT operation")
+			h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
 		}
 	case "DELETE":
-		if len(pathParts) >= 3 {
-			h.handleDeleteFile(w, r, strings.Join(pathParts[2:], "/"))
+		// Only allow DELETE /api/files/delete
+		if len(pathParts) == 3 && pathParts[2] == "delete" {
+			h.handleDeleteFiles(w, r)
 		} else {
-			h.sendError(w, http.StatusBadRequest, "File path required for DELETE operation")
+			h.sendError(w, http.StatusNotFound, "Invalid API endpoint")
 		}
 	default:
 		h.sendError(w, http.StatusMethodNotAllowed, "Method not allowed")
@@ -86,108 +90,16 @@ func (h *APIHandler) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	h.sendSuccess(w, http.StatusOK, "Files retrieved successfully", response)
 }
 
-// POST /api/files - add a single file
-func (h *APIHandler) handleAddFile(w http.ResponseWriter, r *http.Request) {
-	var file types.FileEntry
-	if err := json.NewDecoder(r.Body).Decode(&file); err != nil {
+// POST /api/files/add - add multiple files
+func (h *APIHandler) handleAddFiles(w http.ResponseWriter, r *http.Request) {
+	var request AddFilesRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		h.sendError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
 		return
 	}
 
-	if err := h.validateFileEntry(file); err != nil {
-		h.sendError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	file.Path = path.Clean("/" + strings.TrimPrefix(file.Path, "/"))
-
-	if err := h.vfs.AddFile(file.Path, file.URL); err != nil {
-		h.sendError(w, http.StatusConflict, "Failed to add file: "+err.Error())
-		return
-	}
-
-	h.sendSuccess(w, http.StatusCreated, "File added successfully", file)
-}
-
-// PUT /api/files/{path} - update a single file
-func (h *APIHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request, filePath string) {
-	filePath = "/" + filePath
-	filePath = path.Clean(filePath)
-
-	var updateData struct {
-		URL string `json:"url"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
-		h.sendError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
-		return
-	}
-
-	if updateData.URL == "" {
-		h.sendError(w, http.StatusBadRequest, "url is required")
-		return
-	}
-
-	if !strings.HasPrefix(updateData.URL, "http://") && !strings.HasPrefix(updateData.URL, "https://") {
-		h.sendError(w, http.StatusBadRequest, "url must be a valid HTTP or HTTPS URL")
-		return
-	}
-
-	if !h.vfs.Exists(filePath) {
-		h.sendError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	if h.vfs.IsDir(filePath) {
-		h.sendError(w, http.StatusBadRequest, "Cannot update directory")
-		return
-	}
-
-	if err := h.vfs.UpdateFile(filePath, updateData.URL); err != nil {
-		h.sendError(w, http.StatusInternalServerError, "Failed to update file: "+err.Error())
-		return
-	}
-
-	file := types.FileEntry{
-		Path: filePath,
-		URL:  updateData.URL,
-	}
-
-	h.sendSuccess(w, http.StatusOK, "File updated successfully", file)
-}
-
-// DELETE /api/files/{path} - delete a single file
-func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request, filePath string) {
-	filePath = "/" + filePath
-	filePath = path.Clean(filePath)
-
-	if !h.vfs.Exists(filePath) {
-		h.sendError(w, http.StatusNotFound, "File not found")
-		return
-	}
-
-	if h.vfs.IsDir(filePath) {
-		h.sendError(w, http.StatusBadRequest, "Cannot delete directory")
-		return
-	}
-
-	if err := h.vfs.RemoveFile(filePath); err != nil {
-		h.sendError(w, http.StatusInternalServerError, "Failed to delete file: "+err.Error())
-		return
-	}
-
-	h.sendSuccess(w, http.StatusOK, "File deleted successfully", map[string]string{"path": filePath})
-}
-
-// POST /api/files/bulk - bulk operations
-func (h *APIHandler) handleBulkOperation(w http.ResponseWriter, r *http.Request) {
-	var operation BulkOperation
-	if err := json.NewDecoder(r.Body).Decode(&operation); err != nil {
-		h.sendError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
-		return
-	}
-
-	if operation.Operation != "add" && operation.Operation != "remove" {
-		h.sendError(w, http.StatusBadRequest, "Invalid operation. Must be 'add' or 'remove'")
+	if len(request.Files) == 0 {
+		h.sendError(w, http.StatusBadRequest, "files array cannot be empty")
 		return
 	}
 
@@ -195,8 +107,9 @@ func (h *APIHandler) handleBulkOperation(w http.ResponseWriter, r *http.Request)
 	successful := 0
 	failed := 0
 	errors := make(map[string]string)
+	successfulFiles := make([]types.FileEntry, 0)
 
-	for _, file := range operation.Files {
+	for _, file := range request.Files {
 		if err := h.validateFileEntry(file); err != nil {
 			errors[file.Path] = err.Error()
 			failed++
@@ -205,30 +118,88 @@ func (h *APIHandler) handleBulkOperation(w http.ResponseWriter, r *http.Request)
 
 		file.Path = path.Clean("/" + strings.TrimPrefix(file.Path, "/"))
 
-		var err error
-		switch operation.Operation {
-		case "add":
-			err = h.vfs.AddFile(file.Path, file.URL)
-		case "remove":
-			err = h.vfs.RemoveFile(file.Path)
-		}
-
-		if err != nil {
+		if err := h.vfs.AddFile(file.Path, file.URL); err != nil {
 			errors[file.Path] = err.Error()
 			failed++
 		} else {
 			successful++
+			successfulFiles = append(successfulFiles, file)
 		}
 	}
 
 	results["successful"] = successful
 	results["failed"] = failed
+	results["files"] = successfulFiles
 	if len(errors) > 0 {
 		results["errors"] = errors
 	}
 
-	message := fmt.Sprintf("Bulk %s operation completed: %d successful, %d failed",
-		operation.Operation, successful, failed)
+	message := fmt.Sprintf("Add operation completed: %d successful, %d failed", successful, failed)
+
+	if failed == 0 {
+		h.sendSuccess(w, http.StatusCreated, message, results)
+	} else {
+		h.sendSuccess(w, http.StatusPartialContent, message, results)
+	}
+}
+
+// DELETE /api/files/delete - delete multiple files
+func (h *APIHandler) handleDeleteFiles(w http.ResponseWriter, r *http.Request) {
+	var request DeleteFilesRequest
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		h.sendError(w, http.StatusBadRequest, "Invalid JSON payload: "+err.Error())
+		return
+	}
+
+	if len(request.Files) == 0 {
+		h.sendError(w, http.StatusBadRequest, "files array cannot be empty")
+		return
+	}
+
+	results := make(map[string]interface{})
+	successful := 0
+	failed := 0
+	errors := make(map[string]string)
+	deletedFiles := make([]types.FileEntry, 0)
+
+	for _, file := range request.Files {
+		if file.Path == "" {
+			errors[file.Path] = "path is required"
+			failed++
+			continue
+		}
+
+		filePath := path.Clean("/" + strings.TrimPrefix(file.Path, "/"))
+
+		if !h.vfs.Exists(filePath) {
+			errors[filePath] = "File not found"
+			failed++
+			continue
+		}
+
+		if h.vfs.IsDir(filePath) {
+			errors[filePath] = "Cannot delete directory"
+			failed++
+			continue
+		}
+
+		if err := h.vfs.RemoveFile(filePath); err != nil {
+			errors[filePath] = err.Error()
+			failed++
+		} else {
+			successful++
+			deletedFiles = append(deletedFiles, types.FileEntry{Path: filePath, URL: file.URL})
+		}
+	}
+
+	results["successful"] = successful
+	results["failed"] = failed
+	results["files"] = deletedFiles
+	if len(errors) > 0 {
+		results["errors"] = errors
+	}
+
+	message := fmt.Sprintf("Delete operation completed: %d successful, %d failed", successful, failed)
 
 	if failed == 0 {
 		h.sendSuccess(w, http.StatusOK, message, results)
