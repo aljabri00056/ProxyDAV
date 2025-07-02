@@ -12,44 +12,43 @@ import (
 	"syscall"
 	"time"
 
-	"proxydav/internal/cache"
 	"proxydav/internal/config"
 	"proxydav/internal/filesystem"
 	"proxydav/internal/handlers"
-	"proxydav/pkg/types"
+	"proxydav/internal/storage"
 )
 
-// Server represents the ProxyDAV server
 type Server struct {
 	config         *config.Config
 	vfs            *filesystem.VirtualFS
-	cache          *cache.MetadataCache
+	store          *storage.PersistentStore
 	httpServer     *http.Server
 	webdavHandler  *handlers.WebDAVHandler
 	browserHandler *handlers.BrowserHandler
 	apiHandler     *handlers.APIHandler
 }
 
-// New creates a new ProxyDAV server
-func New(cfg *config.Config, files []types.FileEntry) *Server {
-	// Create virtual filesystem
-	vfs := filesystem.New(files)
+func New(cfg *config.Config) (*Server, error) {
+	store, err := storage.New(cfg.DataDir)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create persistent store: %w", err)
+	}
 
-	// Create metadata cache
-	cacheTTL := time.Duration(cfg.CacheTTL) * time.Second
-	metadataCache := cache.New(cacheTTL, cfg.MaxCacheSize)
+	vfs, err := filesystem.New(store)
+	if err != nil {
+		store.Close()
+		return nil, fmt.Errorf("failed to create virtual filesystem: %w", err)
+	}
 
-	// Create handlers
-	webdavHandler := handlers.NewWebDAVHandler(vfs, metadataCache, cfg.UseRedirect)
+	webdavHandler := handlers.NewWebDAVHandler(vfs, store, cfg.UseRedirect)
 	browserHandler := handlers.NewBrowserHandler(vfs)
 	apiHandler := handlers.NewAPIHandler(vfs)
 
-	// Create HTTP server
 	mux := http.NewServeMux()
 	server := &Server{
 		config:         cfg,
 		vfs:            vfs,
-		cache:          metadataCache,
+		store:          store,
 		webdavHandler:  webdavHandler,
 		browserHandler: browserHandler,
 		apiHandler:     apiHandler,
@@ -62,25 +61,20 @@ func New(cfg *config.Config, files []types.FileEntry) *Server {
 		},
 	}
 
-	// Setup routes
 	server.setupRoutes(mux)
 
-	return server
+	return server, nil
 }
 
-// setupRoutes sets up the HTTP routes
 func (s *Server) setupRoutes(mux *http.ServeMux) {
-	// Health check endpoint
-	mux.HandleFunc(s.config.HealthPath, s.handleHealth)
+	mux.HandleFunc("/health", s.handleHealth)
 
-	// API endpoints for file management
 	apiHandler := s.loggingMiddleware(s.apiHandler.ServeHTTP)
 	if s.config.AuthEnabled {
 		apiHandler = s.basicAuthMiddleware(apiHandler)
 	}
 	mux.HandleFunc("/api/", apiHandler)
 
-	// Main handler with middleware
 	handler := s.loggingMiddleware(s.routeRequest)
 	if s.config.AuthEnabled {
 		handler = s.basicAuthMiddleware(handler)
@@ -89,7 +83,6 @@ func (s *Server) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/", handler)
 }
 
-// routeRequest routes requests to appropriate handlers
 func (s *Server) routeRequest(w http.ResponseWriter, r *http.Request) {
 	// Route based on Accept header and method
 	if r.Method == "GET" && strings.Contains(r.Header.Get("Accept"), "text/html") {
@@ -99,10 +92,9 @@ func (s *Server) routeRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleHealth handles health check requests
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	fmt.Fprintf(w, `{"status":"healthy","cache_size":%d}`, s.cache.Size())
+	fmt.Fprintf(w, `{"status":"healthy","data_dir":"%s"}`, s.config.DataDir)
 }
 
 // basicAuthMiddleware provides HTTP Basic authentication
@@ -155,15 +147,13 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Start starts the server
 func (s *Server) Start() error {
 	log.Printf("Starting ProxyDAV server on port %d", s.config.Port)
-	log.Printf("Cache TTL: %d seconds", s.config.CacheTTL)
+	log.Printf("Data directory: %s", s.config.DataDir)
 	log.Printf("Use redirect: %v", s.config.UseRedirect)
 	log.Printf("Authentication: %v", s.config.AuthEnabled)
-	log.Printf("Health endpoint: %s", s.config.HealthPath)
+	log.Printf("Health endpoint: %s", "/health")
 
-	// Start server in a goroutine
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Server failed to start: %v", err)
@@ -172,7 +162,6 @@ func (s *Server) Start() error {
 
 	log.Printf("Server started successfully on http://localhost:%d", s.config.Port)
 
-	// Wait for interrupt signal
 	return s.waitForShutdown()
 }
 
@@ -184,24 +173,22 @@ func (s *Server) waitForShutdown() error {
 	<-quit
 	log.Println("Shutting down server...")
 
-	// Create shutdown context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Shutdown HTTP server
 	if err := s.httpServer.Shutdown(ctx); err != nil {
 		log.Printf("Server forced to shutdown: %v", err)
 		return err
 	}
 
-	// Close cache
-	s.cache.Close()
+	if err := s.store.Close(); err != nil {
+		log.Printf("Error closing persistent store: %v", err)
+	}
 
 	log.Println("Server shutdown complete")
 	return nil
 }
 
-// Stop stops the server gracefully
 func (s *Server) Stop() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -210,6 +197,5 @@ func (s *Server) Stop() error {
 		return err
 	}
 
-	s.cache.Close()
-	return nil
+	return s.store.Close()
 }

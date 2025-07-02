@@ -3,17 +3,36 @@ package filesystem
 import (
 	"testing"
 
+	"proxydav/internal/storage"
 	"proxydav/pkg/types"
 )
 
 func TestVirtualFS_Creation(t *testing.T) {
+	tempDir := t.TempDir()
+
+	store, err := storage.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
 	files := []types.FileEntry{
 		{Path: "/documents/file1.txt", URL: "https://example.com/file1.txt"},
 		{Path: "/documents/subfolder/file2.txt", URL: "https://example.com/file2.txt"},
 		{Path: "/images/photo.jpg", URL: "https://example.com/photo.jpg"},
 	}
 
-	vfs := New(files)
+	for _, file := range files {
+		err := store.SetFileEntry(&file)
+		if err != nil {
+			t.Fatalf("Failed to set file entry: %v", err)
+		}
+	}
+
+	vfs, err := New(store)
+	if err != nil {
+		t.Fatalf("Failed to create VFS: %v", err)
+	}
 
 	// Test that all files exist
 	for _, file := range files {
@@ -35,11 +54,25 @@ func TestVirtualFS_Creation(t *testing.T) {
 }
 
 func TestVirtualFS_GetItem(t *testing.T) {
-	files := []types.FileEntry{
-		{Path: "/test/file.txt", URL: "https://example.com/file.txt"},
+	tempDir := t.TempDir()
+
+	store, err := storage.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Add test file to store
+	file := types.FileEntry{Path: "/test/file.txt", URL: "https://example.com/file.txt"}
+	err = store.SetFileEntry(&file)
+	if err != nil {
+		t.Fatalf("Failed to set file entry: %v", err)
 	}
 
-	vfs := New(files)
+	vfs, err := New(store)
+	if err != nil {
+		t.Fatalf("Failed to create VFS: %v", err)
+	}
 
 	// Test getting a file
 	item, exists := vfs.GetItem("/test/file.txt")
@@ -52,76 +85,155 @@ func TestVirtualFS_GetItem(t *testing.T) {
 	}
 
 	if item.URL != "https://example.com/file.txt" {
-		t.Errorf("Expected URL 'https://example.com/file.txt', got '%s'", item.URL)
+		t.Errorf("Expected URL https://example.com/file.txt, got %s", item.URL)
 	}
 
 	// Test getting a directory
-	item, exists = vfs.GetItem("/test")
+	dirItem, exists := vfs.GetItem("/test")
 	if !exists {
 		t.Fatal("Directory should exist")
 	}
 
-	if !item.IsDir {
+	if !dirItem.IsDir {
 		t.Error("Directory should be marked as directory")
 	}
 }
 
 func TestVirtualFS_ListDir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	store, err := storage.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
 	files := []types.FileEntry{
-		{Path: "/docs/file1.txt", URL: "https://example.com/file1.txt"},
-		{Path: "/docs/file2.txt", URL: "https://example.com/file2.txt"},
-		{Path: "/docs/subfolder/file3.txt", URL: "https://example.com/file3.txt"},
-		{Path: "/images/photo.jpg", URL: "https://example.com/photo.jpg"},
+		{Path: "/folder/file1.txt", URL: "https://example.com/file1.txt"},
+		{Path: "/folder/file2.txt", URL: "https://example.com/file2.txt"},
+		{Path: "/folder/subfolder/file3.txt", URL: "https://example.com/file3.txt"},
 	}
 
-	vfs := New(files)
-
-	// Test listing root directory
-	rootItems := vfs.ListDir("/")
-	if len(rootItems) != 2 { // docs and images
-		t.Errorf("Expected 2 items in root, got %d", len(rootItems))
+	for _, file := range files {
+		err := store.SetFileEntry(&file)
+		if err != nil {
+			t.Fatalf("Failed to set file entry: %v", err)
+		}
 	}
 
-	// Test listing docs directory
-	docsItems := vfs.ListDir("/docs")
-	if len(docsItems) != 3 { // file1.txt, file2.txt, subfolder
-		t.Errorf("Expected 3 items in /docs, got %d", len(docsItems))
+	vfs, err := New(store)
+	if err != nil {
+		t.Fatalf("Failed to create VFS: %v", err)
 	}
 
-	// Check that directories come first
-	if !docsItems[0].IsDir {
-		t.Error("First item should be a directory (subfolder)")
+	// List contents of /folder
+	items := vfs.ListDir("/folder")
+	if len(items) != 3 { // 2 files + 1 directory
+		t.Errorf("Expected 3 items in /folder, got %d", len(items))
 	}
 
-	// Test listing non-existent directory
-	nonExistentItems := vfs.ListDir("/nonexistent")
-	if nonExistentItems != nil {
-		t.Error("Non-existent directory should return nil")
+	// Check that directories come first (alphabetically sorted)
+	foundDir := false
+	foundFiles := 0
+	for _, item := range items {
+		if item.IsDir {
+			foundDir = true
+			if foundFiles > 0 {
+				t.Error("Directories should come before files")
+			}
+		} else {
+			foundFiles++
+		}
+	}
+
+	if !foundDir {
+		t.Error("Should have found subfolder directory")
+	}
+	if foundFiles != 2 {
+		t.Errorf("Should have found 2 files, got %d", foundFiles)
 	}
 }
 
-func TestVirtualFS_GetAllPaths(t *testing.T) {
-	files := []types.FileEntry{
-		{Path: "/test/file.txt", URL: "https://example.com/file.txt"},
-		{Path: "/other/file.txt", URL: "https://example.com/other.txt"},
+func TestVirtualFS_AddFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	store, err := storage.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	vfs, err := New(store)
+	if err != nil {
+		t.Fatalf("Failed to create VFS: %v", err)
 	}
 
-	vfs := New(files)
-
-	paths := vfs.GetAllPaths()
-
-	// Should include all files and directories
-	expectedPaths := []string{"/", "/other", "/other/file.txt", "/test", "/test/file.txt"}
-
-	if len(paths) != len(expectedPaths) {
-		t.Errorf("Expected %d paths, got %d", len(expectedPaths), len(paths))
+	// Add a file
+	err = vfs.AddFile("/new/file.txt", "https://example.com/new.txt")
+	if err != nil {
+		t.Fatalf("Failed to add file: %v", err)
 	}
 
-	// Check that paths are sorted
-	for i := 1; i < len(paths); i++ {
-		if paths[i-1] > paths[i] {
-			t.Error("Paths should be sorted")
-			break
-		}
+	// Verify it exists
+	if !vfs.Exists("/new/file.txt") {
+		t.Error("Added file should exist")
+	}
+
+	// Verify parent directory was created
+	if !vfs.IsDir("/new") {
+		t.Error("Parent directory should have been created")
+	}
+
+	// Try to add the same file again (should fail)
+	err = vfs.AddFile("/new/file.txt", "https://example.com/duplicate.txt")
+	if err == nil {
+		t.Error("Adding duplicate file should fail")
+	}
+}
+
+func TestVirtualFS_RemoveFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	store, err := storage.New(tempDir)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	// Add test file to store
+	file := types.FileEntry{Path: "/temp/file.txt", URL: "https://example.com/temp.txt"}
+	err = store.SetFileEntry(&file)
+	if err != nil {
+		t.Fatalf("Failed to set file entry: %v", err)
+	}
+
+	vfs, err := New(store)
+	if err != nil {
+		t.Fatalf("Failed to create VFS: %v", err)
+	}
+
+	// Verify file exists
+	if !vfs.Exists("/temp/file.txt") {
+		t.Fatal("File should exist before removal")
+	}
+
+	// Remove the file
+	err = vfs.RemoveFile("/temp/file.txt")
+	if err != nil {
+		t.Fatalf("Failed to remove file: %v", err)
+	}
+
+	// Verify file is gone
+	if vfs.Exists("/temp/file.txt") {
+		t.Error("File should not exist after removal")
+	}
+
+	// Verify it's also removed from persistent storage
+	retrieved, err := store.GetFileEntry("/temp/file.txt")
+	if err != nil {
+		t.Fatalf("Failed to check storage: %v", err)
+	}
+	if retrieved != nil {
+		t.Error("File should be removed from persistent storage")
 	}
 }

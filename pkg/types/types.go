@@ -2,21 +2,17 @@ package types
 
 import "time"
 
-// FileEntry represents a mapping between a virtual path and a remote URL
 type FileEntry struct {
 	Path string `json:"path"`
 	URL  string `json:"url"`
 }
 
-// FileMetadata represents cached metadata about a remote file
 type FileMetadata struct {
-	URL          string
-	Size         int64
-	LastModified time.Time
-	CachedAt     time.Time
+	URL          string    `json:"url"`
+	Size         int64     `json:"size"`
+	LastModified time.Time `json:"last_modified"`
 }
 
-// VirtualItem represents an item in the virtual filesystem
 type VirtualItem struct {
 	Name  string
 	Path  string

@@ -169,7 +169,6 @@ func NewBrowserHandler(vfs *filesystem.VirtualFS) *BrowserHandler {
 // ServeHTTP handles browser requests
 func (h *BrowserHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	requestPath := r.URL.Path
-	// Normalize path to match how VFS stores paths
 	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
 
 	if !h.vfs.Exists(normalizedPath) {

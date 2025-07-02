@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-// WebDAV XML structures
 type Multistatus struct {
 	XMLName   xml.Name   `xml:"DAV: multistatus"`
 	Responses []Response `xml:"response"`
@@ -60,14 +59,10 @@ type PropReq struct {
 	ETag          *struct{} `xml:"getetag,omitempty"`
 }
 
-// Helper functions for WebDAV responses
-
-// FormatTime formats a time for WebDAV responses
 func FormatTime(t time.Time) string {
 	return t.UTC().Format("Mon, 02 Jan 2006 15:04:05 GMT")
 }
 
-// GenerateETag generates an ETag from a URL and modification time
 func GenerateETag(url string, modTime time.Time) string {
 	return `"` + url + "-" + modTime.Format("20060102150405") + `"`
 }

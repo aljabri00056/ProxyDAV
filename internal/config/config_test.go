@@ -13,32 +13,32 @@ func TestConfigValidation(t *testing.T) {
 		{
 			name: "valid config",
 			config: Config{
-				Port:     8080,
-				CacheTTL: 3600,
+				Port:    8080,
+				DataDir: "./proxydavData",
 			},
 			wantErr: false,
 		},
 		{
 			name: "invalid port - too low",
 			config: Config{
-				Port:     0,
-				CacheTTL: 3600,
+				Port:    0,
+				DataDir: "./proxydavData",
 			},
 			wantErr: true,
 		},
 		{
 			name: "invalid port - too high",
 			config: Config{
-				Port:     99999,
-				CacheTTL: 3600,
+				Port:    99999,
+				DataDir: "./proxydavData",
 			},
 			wantErr: true,
 		},
 		{
-			name: "negative cache TTL",
+			name: "empty data directory",
 			config: Config{
-				Port:     8080,
-				CacheTTL: -1,
+				Port:    8080,
+				DataDir: "",
 			},
 			wantErr: true,
 		},
@@ -46,7 +46,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "auth enabled without credentials",
 			config: Config{
 				Port:        8080,
-				CacheTTL:    3600,
+				DataDir:     "./proxydavData",
 				AuthEnabled: true,
 			},
 			wantErr: true,
@@ -55,7 +55,7 @@ func TestConfigValidation(t *testing.T) {
 			name: "auth enabled with credentials",
 			config: Config{
 				Port:        8080,
-				CacheTTL:    3600,
+				DataDir:     "./proxydavData",
 				AuthEnabled: true,
 				AuthUser:    "user",
 				AuthPass:    "pass",

@@ -7,37 +7,40 @@ import (
 	"strings"
 	"sync"
 
+	"proxydav/internal/storage"
 	"proxydav/pkg/types"
 )
 
-// VirtualFS represents the virtual filesystem structure
 type VirtualFS struct {
 	items map[string]*types.VirtualItem
 	dirs  map[string]bool
+	store *storage.PersistentStore
 	mutex sync.RWMutex // Add mutex for thread safety
 }
 
-// New creates a new virtual filesystem from file entries
-func New(files []types.FileEntry) *VirtualFS {
+func New(store *storage.PersistentStore) (*VirtualFS, error) {
 	vfs := &VirtualFS{
 		items: make(map[string]*types.VirtualItem),
 		dirs:  make(map[string]bool),
+		store: store,
 	}
 
-	// Add root directory
 	vfs.dirs["/"] = true
 
-	// Process each file entry
-	for _, file := range files {
-		vfs.addFile(file.Path, file.URL)
+	files, err := store.GetAllFileEntries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load file entries: %w", err)
 	}
 
-	return vfs
+	for _, file := range files {
+		vfs.addFileToMemory(file.Path, file.URL)
+	}
+
+	return vfs, nil
 }
 
-// addFile adds a file to the virtual filesystem
-func (vfs *VirtualFS) addFile(filePath, fileURL string) {
-	// Normalize path
+// addFileToMemory adds a file to the in-memory virtual filesystem (used during initialization)
+func (vfs *VirtualFS) addFileToMemory(filePath, fileURL string) {
 	filePath = path.Clean("/" + strings.TrimPrefix(filePath, "/"))
 
 	// Add the file itself
@@ -99,7 +102,6 @@ func (vfs *VirtualFS) ListDir(dirPath string) []*types.VirtualItem {
 		return nil
 	}
 
-	// Normalize directory path
 	dirPath = path.Clean("/" + strings.TrimPrefix(dirPath, "/"))
 	if dirPath != "/" {
 		dirPath = strings.TrimSuffix(dirPath, "/")
@@ -152,12 +154,11 @@ func (vfs *VirtualFS) GetAllPaths() []string {
 	return paths
 }
 
-// AddFile adds a new file to the virtual filesystem
+// AddFile adds a new file to the virtual filesystem and persists it
 func (vfs *VirtualFS) AddFile(filePath, fileURL string) error {
 	vfs.mutex.Lock()
 	defer vfs.mutex.Unlock()
 
-	// Normalize path
 	filePath = path.Clean("/" + strings.TrimPrefix(filePath, "/"))
 
 	// Check if file already exists
@@ -170,16 +171,25 @@ func (vfs *VirtualFS) AddFile(filePath, fileURL string) error {
 		return fmt.Errorf("directory exists at path: %s", filePath)
 	}
 
-	vfs.addFile(filePath, fileURL)
+	// Persist to storage first
+	entry := &types.FileEntry{
+		Path: filePath,
+		URL:  fileURL,
+	}
+	if err := vfs.store.SetFileEntry(entry); err != nil {
+		return fmt.Errorf("failed to persist file entry: %w", err)
+	}
+
+	// Add to memory
+	vfs.addFileToMemory(filePath, fileURL)
 	return nil
 }
 
-// UpdateFile updates an existing file in the virtual filesystem
+// UpdateFile updates an existing file in the virtual filesystem and persists it
 func (vfs *VirtualFS) UpdateFile(filePath, fileURL string) error {
 	vfs.mutex.Lock()
 	defer vfs.mutex.Unlock()
 
-	// Normalize path
 	filePath = path.Clean("/" + strings.TrimPrefix(filePath, "/"))
 
 	// Check if file exists
@@ -193,17 +203,25 @@ func (vfs *VirtualFS) UpdateFile(filePath, fileURL string) error {
 		return fmt.Errorf("cannot update directory at path: %s", filePath)
 	}
 
-	// Update the URL
+	// Persist to storage first
+	entry := &types.FileEntry{
+		Path: filePath,
+		URL:  fileURL,
+	}
+	if err := vfs.store.SetFileEntry(entry); err != nil {
+		return fmt.Errorf("failed to persist file entry: %w", err)
+	}
+
+	// Update in memory
 	item.URL = fileURL
 	return nil
 }
 
-// RemoveFile removes a file from the virtual filesystem
+// RemoveFile removes a file from the virtual filesystem and persistent storage
 func (vfs *VirtualFS) RemoveFile(filePath string) error {
 	vfs.mutex.Lock()
 	defer vfs.mutex.Unlock()
 
-	// Normalize path
 	filePath = path.Clean("/" + strings.TrimPrefix(filePath, "/"))
 
 	// Check if file exists
@@ -217,7 +235,17 @@ func (vfs *VirtualFS) RemoveFile(filePath string) error {
 		return fmt.Errorf("cannot remove directory at path: %s", filePath)
 	}
 
-	// Remove the file
+	// Remove from persistent storage first
+	if err := vfs.store.DeleteFileEntry(filePath); err != nil {
+		return fmt.Errorf("failed to remove file entry from storage: %w", err)
+	}
+
+	// Also remove associated metadata if it exists
+	if item.URL != "" {
+		_ = vfs.store.DeleteFileMetadata(item.URL) // Don't fail if metadata doesn't exist
+	}
+
+	// Remove from memory
 	delete(vfs.items, filePath)
 
 	// Clean up empty parent directories

@@ -6,11 +6,11 @@ A high-performance WebDAV server that creates a virtual filesystem from remote H
 
 - 🌐 **WebDAV Protocol Support** - Full compatibility with WebDAV clients
 - 🗂️ **Virtual Filesystem** - Create directory structures from remote files
-- 🚀 **High Performance** - Connection pooling, caching, and optimized HTTP handling
-- � **REST API** - Complete CRUD API for dynamic file management
-- �🔐 **Authentication** - Optional Basic HTTP authentication
+- 🚀 **High Performance** - Connection pooling, persistent storage, and optimized HTTP handling
+- 🛠️ **REST API** - Complete CRUD API for dynamic file management
+- 🔐 **Authentication** - Optional Basic HTTP authentication
 - 📱 **Browser Support** - Beautiful web interface for directory browsing
-- ⚡ **Caching** - Intelligent metadata caching with TTL
+- 💾 **Persistent Storage** - BadgerDB-based persistence with automatic data recovery
 - 🔄 **Two Modes** - Proxy mode (stream files) or redirect mode (302 redirects)
 - 🏥 **Health Checks** - Built-in health monitoring endpoint
 - 🛡️ **Security** - Input validation, path sanitization, and URL validation
@@ -83,11 +83,72 @@ curl -X POST http://localhost:8080/api/files/bulk \
 # Custom port
 ./proxydav -port 9000
 
+# Custom data directory for persistent storage
+./proxydav -data-dir /path/to/data
+
 # With authentication
 ./proxydav -auth -user admin -pass secret
 
 # Redirect mode (faster for large files)
 ./proxydav -redirect
+```
+
+## Persistent Storage
+
+ProxyDAV uses BadgerDB for persistent storage of file entries and metadata. All data is automatically saved and restored across server restarts.
+
+- **File Entries**: Virtual path to URL mappings are permanently stored
+- **Metadata**: File size and modification times are cached persistently
+- **Auto-Recovery**: On startup, the server automatically loads all existing files from the database
+- **Data Directory**: Configurable storage location (default: `./data`)
+
+## Data Persistence
+
+ProxyDAV uses BadgerDB, a high-performance embedded database, for data persistence. This ensures that all your file mappings and metadata survive server restarts and system crashes.
+
+### Data Storage
+
+- **Location**: Configurable via `-data-dir` flag (default: `./data`)
+- **Format**: BadgerDB database files
+- **Backup**: Copy the entire data directory to backup your configuration
+- **Migration**: Simply move the data directory to migrate between servers
+
+### What Gets Persisted
+
+1. **File Entries**: All virtual path to URL mappings
+2. **File Metadata**: Size and last-modified times for performance
+3. **Directory Structure**: Automatically reconstructed from file entries
+
+### Data Recovery
+
+On startup, ProxyDAV automatically:
+1. Opens the BadgerDB database
+2. Loads all existing file entries
+3. Reconstructs the virtual filesystem in memory
+4. Resumes normal operation with all previous data intact
+
+### Example: Backing Up Data
+
+```bash
+# Stop the server
+pkill proxydav
+
+# Backup the data directory
+cp -r ./data ./data-backup-$(date +%Y%m%d)
+
+# Restart the server
+./proxydav
+```
+
+### Example: Migrating to a New Server
+
+```bash
+# On old server - backup data
+tar -czf proxydav-data.tar.gz ./data
+
+# On new server - restore data
+tar -xzf proxydav-data.tar.gz
+./proxydav -data-dir ./data
 ```
 
 ## Configuration
@@ -97,7 +158,7 @@ curl -X POST http://localhost:8080/api/files/bulk \
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-port` | Port to listen on | 8080 |
-| `-cache-ttl` | Cache TTL in seconds | 3600 |
+| `-data-dir` | Directory for persistent data storage | ./data |
 | `-redirect` | Use redirects instead of proxying | false |
 | `-auth` | Enable basic authentication | false |
 | `-user` | Basic auth username | "" |
@@ -109,7 +170,7 @@ Environment variables override command-line flags:
 
 ```bash
 export PORT=9000
-export CACHE_TTL=600
+export DATA_DIR=/path/to/data
 export USE_REDIRECT=true
 export AUTH_ENABLED=true
 export AUTH_USER=admin
@@ -118,7 +179,7 @@ export AUTH_PASS=secret
 
 ### File Management
 
-The only way to add files to ProxyDAV is through the REST API. This ensures a consistent, programmatic interface for all file operations.
+ProxyDAV provides a REST API for dynamic file management. All file entries are automatically persisted to BadgerDB and survive server restarts.
 
 ```bash
 # List all files
@@ -148,6 +209,8 @@ curl -X POST http://localhost:8080/api/files/bulk \
     ]
   }'
 ```
+
+**Note**: Files added via the API are immediately persisted to BadgerDB and will be available after server restarts.
 
 See [API.md](API.md) for complete API documentation.
 
@@ -185,7 +248,7 @@ Response:
 ```json
 {
     "status": "healthy",
-    "cache_size": 150
+    "data_dir": "./data"
 }
 ```
 

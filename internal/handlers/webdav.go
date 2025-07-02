@@ -13,25 +13,23 @@ import (
 	"strings"
 	"time"
 
-	"proxydav/internal/cache"
 	"proxydav/internal/filesystem"
+	"proxydav/internal/storage"
 	"proxydav/internal/webdav"
 	"proxydav/pkg/types"
 )
 
-// WebDAVHandler handles WebDAV requests
 type WebDAVHandler struct {
 	vfs         *filesystem.VirtualFS
-	cache       *cache.MetadataCache
+	store       *storage.PersistentStore
 	useRedirect bool
 	client      *http.Client
 }
 
-// NewWebDAVHandler creates a new WebDAV handler
-func NewWebDAVHandler(vfs *filesystem.VirtualFS, cache *cache.MetadataCache, useRedirect bool) *WebDAVHandler {
+func NewWebDAVHandler(vfs *filesystem.VirtualFS, store *storage.PersistentStore, useRedirect bool) *WebDAVHandler {
 	return &WebDAVHandler{
 		vfs:         vfs,
-		cache:       cache,
+		store:       store,
 		useRedirect: useRedirect,
 		client: &http.Client{
 			Timeout: 30 * time.Second,
@@ -39,7 +37,6 @@ func NewWebDAVHandler(vfs *filesystem.VirtualFS, cache *cache.MetadataCache, use
 	}
 }
 
-// ServeHTTP handles WebDAV requests
 func (h *WebDAVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case "OPTIONS":
@@ -53,7 +50,6 @@ func (h *WebDAVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleOptions handles OPTIONS requests
 func (h *WebDAVHandler) handleOptions(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Allow", "OPTIONS, PROPFIND, GET, HEAD")
 	w.Header().Set("DAV", "1")
@@ -61,10 +57,8 @@ func (h *WebDAVHandler) handleOptions(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// handlePropFind handles PROPFIND requests
 func (h *WebDAVHandler) handlePropFind(w http.ResponseWriter, r *http.Request) {
 	requestPath := r.URL.Path
-	// Normalize path to match how VFS stores paths
 	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
 	if !h.vfs.Exists(normalizedPath) {
 		http.Error(w, "Not Found", http.StatusNotFound)
@@ -138,7 +132,7 @@ func (h *WebDAVHandler) createResponse(requestPath string) *webdav.Response {
 			ContentType:  mime.TypeByExtension(filepath.Ext(item.Name)),
 		}
 
-		// Try to get metadata from cache or fetch it
+		// Try to get metadata from persistent store or fetch it
 		metadata := h.getFileMetadata(item.URL)
 		if metadata != nil {
 			response.Propstat.Prop.ContentLength = &metadata.Size
@@ -163,10 +157,10 @@ func (h *WebDAVHandler) createResponse(requestPath string) *webdav.Response {
 	return response
 }
 
-// getFileMetadata gets file metadata from cache or by making a HEAD request
+// getFileMetadata gets file metadata from persistent store or by making a HEAD request
 func (h *WebDAVHandler) getFileMetadata(url string) *types.FileMetadata {
-	// Try cache first
-	if metadata := h.cache.Get(url); metadata != nil {
+	// Try persistent store first
+	if metadata, err := h.store.GetFileMetadata(url); err == nil && metadata != nil {
 		return metadata
 	}
 
@@ -213,8 +207,10 @@ func (h *WebDAVHandler) getFileMetadata(url string) *types.FileMetadata {
 		metadata.LastModified = time.Now()
 	}
 
-	// Cache the metadata
-	h.cache.Set(url, metadata)
+	// Store the metadata persistently
+	if err := h.store.SetFileMetadata(metadata); err != nil {
+		log.Printf("Failed to store metadata for %s: %v", url, err)
+	}
 
 	return metadata
 }
@@ -229,7 +225,6 @@ func (h *WebDAVHandler) handleGetHead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normalize path to match how VFS stores paths
 	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
 	item, exists := h.vfs.GetItem(normalizedPath)
 	if !exists {

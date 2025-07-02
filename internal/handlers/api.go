@@ -11,19 +11,16 @@ import (
 	"proxydav/pkg/types"
 )
 
-// APIHandler handles REST API requests for file management
 type APIHandler struct {
 	vfs *filesystem.VirtualFS
 }
 
-// NewAPIHandler creates a new API handler
 func NewAPIHandler(vfs *filesystem.VirtualFS) *APIHandler {
 	return &APIHandler{
 		vfs: vfs,
 	}
 }
 
-// APIResponse represents a standard API response
 type APIResponse struct {
 	Success bool        `json:"success"`
 	Message string      `json:"message,omitempty"`
@@ -31,19 +28,16 @@ type APIResponse struct {
 	Error   string      `json:"error,omitempty"`
 }
 
-// BulkOperation represents a bulk file operation request
 type BulkOperation struct {
 	Operation string            `json:"operation"` // "add" or "remove"
 	Files     []types.FileEntry `json:"files"`
 }
 
-// FileListResponse represents the response for listing files
 type FileListResponse struct {
 	Files []types.FileEntry `json:"files"`
 	Total int               `json:"total"`
 }
 
-// ServeHTTP handles API requests
 func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -80,7 +74,7 @@ func (h *APIHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleListFiles handles GET /api/files - list all files
+// GET /api/files - list all files
 func (h *APIHandler) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	files := h.vfs.GetAllFiles()
 
@@ -92,7 +86,7 @@ func (h *APIHandler) handleListFiles(w http.ResponseWriter, r *http.Request) {
 	h.sendSuccess(w, http.StatusOK, "Files retrieved successfully", response)
 }
 
-// handleAddFile handles POST /api/files - add a single file
+// POST /api/files - add a single file
 func (h *APIHandler) handleAddFile(w http.ResponseWriter, r *http.Request) {
 	var file types.FileEntry
 	if err := json.NewDecoder(r.Body).Decode(&file); err != nil {
@@ -105,7 +99,6 @@ func (h *APIHandler) handleAddFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Normalize path
 	file.Path = path.Clean("/" + strings.TrimPrefix(file.Path, "/"))
 
 	if err := h.vfs.AddFile(file.Path, file.URL); err != nil {
@@ -116,9 +109,8 @@ func (h *APIHandler) handleAddFile(w http.ResponseWriter, r *http.Request) {
 	h.sendSuccess(w, http.StatusCreated, "File added successfully", file)
 }
 
-// handleUpdateFile handles PUT /api/files/{path} - update a single file
+// PUT /api/files/{path} - update a single file
 func (h *APIHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request, filePath string) {
-	// Decode path parameter
 	filePath = "/" + filePath
 	filePath = path.Clean(filePath)
 
@@ -155,7 +147,6 @@ func (h *APIHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request, fi
 		return
 	}
 
-	// Create response with updated file entry
 	file := types.FileEntry{
 		Path: filePath,
 		URL:  updateData.URL,
@@ -164,9 +155,8 @@ func (h *APIHandler) handleUpdateFile(w http.ResponseWriter, r *http.Request, fi
 	h.sendSuccess(w, http.StatusOK, "File updated successfully", file)
 }
 
-// handleDeleteFile handles DELETE /api/files/{path} - delete a single file
+// DELETE /api/files/{path} - delete a single file
 func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request, filePath string) {
-	// Decode path parameter
 	filePath = "/" + filePath
 	filePath = path.Clean(filePath)
 
@@ -188,7 +178,7 @@ func (h *APIHandler) handleDeleteFile(w http.ResponseWriter, r *http.Request, fi
 	h.sendSuccess(w, http.StatusOK, "File deleted successfully", map[string]string{"path": filePath})
 }
 
-// handleBulkOperation handles POST /api/files/bulk - bulk operations
+// POST /api/files/bulk - bulk operations
 func (h *APIHandler) handleBulkOperation(w http.ResponseWriter, r *http.Request) {
 	var operation BulkOperation
 	if err := json.NewDecoder(r.Body).Decode(&operation); err != nil {
@@ -213,7 +203,6 @@ func (h *APIHandler) handleBulkOperation(w http.ResponseWriter, r *http.Request)
 			continue
 		}
 
-		// Normalize path
 		file.Path = path.Clean("/" + strings.TrimPrefix(file.Path, "/"))
 
 		var err error
@@ -248,7 +237,6 @@ func (h *APIHandler) handleBulkOperation(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// validateFileEntry validates a file entry
 func (h *APIHandler) validateFileEntry(file types.FileEntry) error {
 	if file.Path == "" {
 		return fmt.Errorf("path is required")
@@ -262,7 +250,6 @@ func (h *APIHandler) validateFileEntry(file types.FileEntry) error {
 	return nil
 }
 
-// sendSuccess sends a successful API response
 func (h *APIHandler) sendSuccess(w http.ResponseWriter, statusCode int, message string, data interface{}) {
 	w.WriteHeader(statusCode)
 	response := APIResponse{
@@ -273,7 +260,6 @@ func (h *APIHandler) sendSuccess(w http.ResponseWriter, statusCode int, message 
 	json.NewEncoder(w).Encode(response)
 }
 
-// sendError sends an error API response
 func (h *APIHandler) sendError(w http.ResponseWriter, statusCode int, errorMsg string) {
 	w.WriteHeader(statusCode)
 	response := APIResponse{
