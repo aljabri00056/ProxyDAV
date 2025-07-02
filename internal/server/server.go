@@ -34,11 +34,15 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("failed to create persistent store: %w", err)
 	}
 
+	log.Printf("💾 Initialized persistent storage in: %s", cfg.DataDir)
+
 	vfs, err := filesystem.New(store)
 	if err != nil {
 		store.Close()
 		return nil, fmt.Errorf("failed to create virtual filesystem: %w", err)
 	}
+
+	log.Println("🗂️  Virtual filesystem initialized")
 
 	webdavHandler := handlers.NewWebDAVHandler(vfs, store, cfg.UseRedirect)
 	browserHandler := handlers.NewBrowserHandler(vfs)
@@ -62,6 +66,8 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 
 	server.setupRoutes(mux)
+
+	log.Println("🛠️  HTTP handlers and routes configured")
 
 	return server, nil
 }
@@ -132,7 +138,14 @@ func (s *Server) loggingMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		next(wrapped, r)
 
 		duration := time.Since(start)
-		log.Printf("%s %s %d %v %s", r.Method, r.URL.Path, wrapped.statusCode, duration, r.UserAgent())
+		statusEmoji := "✅"
+		if wrapped.statusCode >= 400 && wrapped.statusCode < 500 {
+			statusEmoji = "⚠️ "
+		} else if wrapped.statusCode >= 500 {
+			statusEmoji = "❌"
+		}
+
+		log.Printf("%s %s %s %d %v %s", statusEmoji, r.Method, r.URL.Path, wrapped.statusCode, duration, r.UserAgent())
 	}
 }
 
@@ -148,19 +161,54 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func (s *Server) Start() error {
-	log.Printf("Starting ProxyDAV server on port %d", s.config.Port)
-	log.Printf("Data directory: %s", s.config.DataDir)
-	log.Printf("Use redirect: %v", s.config.UseRedirect)
-	log.Printf("Authentication: %v", s.config.AuthEnabled)
-	log.Printf("Health endpoint: %s", "/health")
+	// Get file count for startup message
+	fileCount, err := s.store.CountFileEntries()
+	if err != nil {
+		log.Printf("⚠️  Warning: Could not count stored files: %v", err)
+		fileCount = -1 // Use -1 to indicate error
+	}
+
+	log.Println("📋 Server Configuration:")
+	log.Printf("   🌐 Port: %d", s.config.Port)
+	log.Printf("   📁 Data Directory: %s", s.config.DataDir)
+	log.Printf("   🔄 Redirect Mode: %v", s.config.UseRedirect)
+	log.Printf("   🔐 Authentication: %v", s.config.AuthEnabled)
+	if s.config.AuthEnabled {
+		log.Printf("   👤 Username: %s", s.config.AuthUser)
+	}
+	log.Printf("   🩺 Health Endpoint: /health")
+	if fileCount >= 0 {
+		if fileCount == 0 {
+			log.Printf("   📄 Stored Files: %d (database is empty)", fileCount)
+		} else {
+			log.Printf("   📄 Stored Files: %d loaded from database", fileCount)
+		}
+	}
+	log.Println()
 
 	go func() {
 		if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server failed to start: %v", err)
+			log.Fatalf("❌ Server failed to start: %v", err)
 		}
 	}()
 
-	log.Printf("Server started successfully on http://localhost:%d", s.config.Port)
+	log.Println("✅ ProxyDAV server started successfully!")
+	log.Printf("🌍 Server URLs:")
+	log.Printf("   📱 Web Interface: http://localhost:%d/", s.config.Port)
+	log.Printf("   🔗 WebDAV Endpoint: webdav://localhost:%d/", s.config.Port)
+	log.Printf("   🛠️  API Endpoint: http://localhost:%d/api/", s.config.Port)
+	log.Printf("   🩺 Health Check: http://localhost:%d/health", s.config.Port)
+	log.Println()
+	if fileCount == 0 {
+		log.Println("💡 Tip: Your virtual filesystem is empty. Add files using:")
+		log.Printf("   curl -X POST http://localhost:%d/api/files \\", s.config.Port)
+		log.Println("     -H \"Content-Type: application/json\" \\")
+		log.Println("     -d '{\"path\":\"/example.pdf\",\"url\":\"https://example.com/file.pdf\"}'")
+	} else if fileCount > 0 {
+		log.Printf("📚 %d file(s) loaded and ready to serve", fileCount)
+	}
+	log.Println("🛑 Press Ctrl+C to stop the server")
+	log.Println()
 
 	return s.waitForShutdown()
 }
@@ -171,21 +219,22 @@ func (s *Server) waitForShutdown() error {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	<-quit
-	log.Println("Shutting down server...")
+	log.Println()
+	log.Println("🛑 Shutdown signal received. Gracefully shutting down...")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := s.httpServer.Shutdown(ctx); err != nil {
-		log.Printf("Server forced to shutdown: %v", err)
+		log.Printf("❌ Server forced to shutdown: %v", err)
 		return err
 	}
 
 	if err := s.store.Close(); err != nil {
-		log.Printf("Error closing persistent store: %v", err)
+		log.Printf("⚠️  Error closing persistent store: %v", err)
 	}
 
-	log.Println("Server shutdown complete")
+	log.Println("✅ Server shutdown complete. Goodbye!")
 	return nil
 }
 

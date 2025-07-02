@@ -24,25 +24,31 @@ func main() {
 	cfg := config.Load()
 
 	if showVersion {
-		fmt.Printf("ProxyDAV %s\n", version)
-		fmt.Printf("Commit: %s\n", commit)
-		fmt.Printf("Built: %s\n", date)
+		fmt.Println()
+		fmt.Println("🌐 ProxyDAV - Virtual WebDAV Server")
+		fmt.Printf("📦 Version: %s\n", version)
+		if commit != "unknown" {
+			fmt.Printf("🔗 Commit: %s\n", commit)
+		}
+		if date != "unknown" {
+			fmt.Printf("📅 Built: %s\n", date)
+		}
+		fmt.Println()
 		os.Exit(0)
 	}
-
 	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Configuration validation failed: %v", err)
+		log.Fatalf("❌ Configuration validation failed: %v", err)
 	}
 
-	log.Println("Starting. Files will be automatically loaded from database.")
+	log.Println("🚀 Starting ProxyDAV server...")
 
 	srv, err := server.New(cfg)
 	if err != nil {
-		log.Fatalf("Failed to create server: %v", err)
+		log.Fatalf("❌ Failed to create server: %v", err)
 	}
 
 	if err := srv.Start(); err != nil {
-		log.Fatalf("Server failed: %v", err)
+		log.Fatalf("❌ Server failed: %v", err)
 		os.Exit(1)
 	}
 }

@@ -161,3 +161,26 @@ func (s *PersistentStore) DeleteFileMetadata(url string) error {
 func (s *PersistentStore) RunGarbageCollection() error {
 	return s.db.RunValueLogGC(0.5)
 }
+
+func (s *PersistentStore) CountFileEntries() (int, error) {
+	count := 0
+
+	err := s.db.View(func(txn *badger.Txn) error {
+		opts := badger.DefaultIteratorOptions
+		opts.PrefetchValues = false // We only need to count, not read values
+		iter := txn.NewIterator(opts)
+		defer iter.Close()
+
+		prefix := []byte("entry:")
+		for iter.Seek(prefix); iter.ValidForPrefix(prefix); iter.Next() {
+			count++
+		}
+		return nil
+	})
+
+	if err != nil {
+		return 0, fmt.Errorf("failed to count file entries: %w", err)
+	}
+
+	return count, nil
+}
