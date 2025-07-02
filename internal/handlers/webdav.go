@@ -45,13 +45,19 @@ func (h *WebDAVHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.handlePropFind(w, r)
 	case "GET", "HEAD":
 		h.handleGetHead(w, r)
+	case "DELETE":
+		h.handleDelete(w, r)
+	case "MOVE":
+		h.handleMove(w, r)
+	case "COPY":
+		h.handleCopy(w, r)
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
 func (h *WebDAVHandler) handleOptions(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Allow", "OPTIONS, PROPFIND, GET, HEAD")
+	w.Header().Set("Allow", "OPTIONS, PROPFIND, GET, HEAD, DELETE, MOVE, COPY")
 	w.Header().Set("DAV", "1")
 	w.Header().Set("MS-Author-Via", "DAV")
 	w.WriteHeader(http.StatusOK)
@@ -284,4 +290,185 @@ func (h *WebDAVHandler) proxyContent(w http.ResponseWriter, r *http.Request, url
 			log.Printf("Error copying response body: %v", err)
 		}
 	}
+}
+
+func (h *WebDAVHandler) handleDelete(w http.ResponseWriter, r *http.Request) {
+	requestPath := r.URL.Path
+	normalizedPath := path.Clean("/" + strings.TrimPrefix(requestPath, "/"))
+
+	if !h.vfs.Exists(normalizedPath) {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	var err error
+	if h.vfs.IsDir(normalizedPath) {
+		err = h.vfs.RemoveDirectory(normalizedPath)
+	} else {
+		err = h.vfs.RemoveFile(normalizedPath)
+	}
+
+	if err != nil {
+		log.Printf("Error deleting %s: %v", normalizedPath, err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *WebDAVHandler) handleMove(w http.ResponseWriter, r *http.Request) {
+	sourcePath := r.URL.Path
+	normalizedSource := path.Clean("/" + strings.TrimPrefix(sourcePath, "/"))
+
+	destination := r.Header.Get("Destination")
+	if destination == "" {
+		http.Error(w, "Missing Destination header", http.StatusBadRequest)
+		return
+	}
+
+	destPath, err := h.parseDestinationPath(destination)
+	if err != nil {
+		log.Printf("Error parsing destination %s: %v", destination, err)
+		http.Error(w, "Bad Destination", http.StatusBadRequest)
+		return
+	}
+
+	normalizedDest := path.Clean("/" + strings.TrimPrefix(destPath, "/"))
+
+	if !h.vfs.Exists(normalizedSource) {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	overwrite := r.Header.Get("Overwrite")
+	if overwrite == "" {
+		overwrite = "T" // Default is to overwrite
+	}
+
+	destExists := h.vfs.Exists(normalizedDest)
+	if destExists && overwrite == "F" {
+		http.Error(w, "Destination exists and overwrite is forbidden", http.StatusPreconditionFailed)
+		return
+	}
+
+	if destExists && overwrite == "T" {
+		var deleteErr error
+		if h.vfs.IsDir(normalizedDest) {
+			deleteErr = h.vfs.RemoveDirectory(normalizedDest)
+		} else {
+			deleteErr = h.vfs.RemoveFile(normalizedDest)
+		}
+		if deleteErr != nil {
+			log.Printf("Error deleting destination %s: %v", normalizedDest, deleteErr)
+			http.Error(w, "Failed to overwrite destination", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	var moveErr error
+	if h.vfs.IsDir(normalizedSource) {
+		moveErr = h.vfs.MoveDirectory(normalizedSource, normalizedDest)
+	} else {
+		moveErr = h.vfs.MoveFile(normalizedSource, normalizedDest)
+	}
+
+	if moveErr != nil {
+		log.Printf("Error moving %s to %s: %v", normalizedSource, normalizedDest, moveErr)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if destExists {
+		w.WriteHeader(http.StatusNoContent) // Replaced existing resource
+	} else {
+		w.WriteHeader(http.StatusCreated) // Created new resource
+	}
+}
+
+func (h *WebDAVHandler) handleCopy(w http.ResponseWriter, r *http.Request) {
+	sourcePath := r.URL.Path
+	normalizedSource := path.Clean("/" + strings.TrimPrefix(sourcePath, "/"))
+
+	destination := r.Header.Get("Destination")
+	if destination == "" {
+		http.Error(w, "Missing Destination header", http.StatusBadRequest)
+		return
+	}
+
+	destPath, err := h.parseDestinationPath(destination)
+	if err != nil {
+		log.Printf("Error parsing destination %s: %v", destination, err)
+		http.Error(w, "Bad Destination", http.StatusBadRequest)
+		return
+	}
+
+	normalizedDest := path.Clean("/" + strings.TrimPrefix(destPath, "/"))
+
+	if !h.vfs.Exists(normalizedSource) {
+		http.Error(w, "Not Found", http.StatusNotFound)
+		return
+	}
+
+	overwrite := r.Header.Get("Overwrite")
+	if overwrite == "" {
+		overwrite = "T" // Default is to overwrite
+	}
+
+	destExists := h.vfs.Exists(normalizedDest)
+	if destExists && overwrite == "F" {
+		http.Error(w, "Destination exists and overwrite is forbidden", http.StatusPreconditionFailed)
+		return
+	}
+
+	if destExists && overwrite == "T" {
+		var deleteErr error
+		if h.vfs.IsDir(normalizedDest) {
+			deleteErr = h.vfs.RemoveDirectory(normalizedDest)
+		} else {
+			deleteErr = h.vfs.RemoveFile(normalizedDest)
+		}
+		if deleteErr != nil {
+			log.Printf("Error deleting destination %s: %v", normalizedDest, deleteErr)
+			http.Error(w, "Failed to overwrite destination", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	var copyErr error
+	if h.vfs.IsDir(normalizedSource) {
+		copyErr = h.vfs.CopyDirectory(normalizedSource, normalizedDest)
+	} else {
+		copyErr = h.vfs.CopyFile(normalizedSource, normalizedDest)
+	}
+
+	if copyErr != nil {
+		log.Printf("Error copying %s to %s: %v", normalizedSource, normalizedDest, copyErr)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	if destExists {
+		w.WriteHeader(http.StatusNoContent) // Replaced existing resource
+	} else {
+		w.WriteHeader(http.StatusCreated) // Created new resource
+	}
+}
+
+func (h *WebDAVHandler) parseDestinationPath(destination string) (string, error) {
+	// The destination can be a full URL or just a path
+	// We need to extract just the path part
+
+	// If it starts with http:// or https://, parse as URL
+	if strings.HasPrefix(destination, "http://") || strings.HasPrefix(destination, "https://") {
+		// Find the path part after the host
+		parts := strings.SplitN(destination, "/", 4)
+		if len(parts) < 4 {
+			return "/", nil
+		}
+		return "/" + parts[3], nil
+	}
+
+	// Otherwise, treat as path
+	return destination, nil
 }

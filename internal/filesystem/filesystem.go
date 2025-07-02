@@ -300,3 +300,332 @@ func (vfs *VirtualFS) cleanupEmptyDirectories(filePath string) {
 		}
 	}
 }
+
+func (vfs *VirtualFS) MoveFile(sourcePath, destPath string) error {
+	vfs.mutex.Lock()
+	defer vfs.mutex.Unlock()
+
+	sourcePath = path.Clean("/" + strings.TrimPrefix(sourcePath, "/"))
+	destPath = path.Clean("/" + strings.TrimPrefix(destPath, "/"))
+
+	sourceItem, exists := vfs.items[sourcePath]
+	if !exists {
+		return fmt.Errorf("source file not found: %s", sourcePath)
+	}
+
+	if sourceItem.IsDir {
+		return fmt.Errorf("cannot move directory: %s", sourcePath)
+	}
+
+	if _, exists := vfs.items[destPath]; exists {
+		return fmt.Errorf("destination already exists: %s", destPath)
+	}
+
+	// Create destination directories if they don't exist
+	vfs.ensureDirectoriesExist(destPath)
+
+	newEntry := &types.FileEntry{
+		Path: destPath,
+		URL:  sourceItem.URL,
+	}
+
+	if err := vfs.store.SetFileEntry(newEntry); err != nil {
+		return fmt.Errorf("failed to persist moved file entry: %w", err)
+	}
+
+	if err := vfs.store.DeleteFileEntry(sourcePath); err != nil {
+		// Try to rollback the new entry
+		_ = vfs.store.DeleteFileEntry(destPath)
+		return fmt.Errorf("failed to remove source file entry: %w", err)
+	}
+
+	// Update in memory - create new item
+	vfs.items[destPath] = &types.VirtualItem{
+		Name:  path.Base(destPath),
+		Path:  destPath,
+		URL:   sourceItem.URL,
+		IsDir: false,
+	}
+
+	// Remove old item from memory
+	delete(vfs.items, sourcePath)
+
+	vfs.cleanupEmptyDirectories(sourcePath)
+
+	return nil
+}
+
+func (vfs *VirtualFS) CopyFile(sourcePath, destPath string) error {
+	vfs.mutex.Lock()
+	defer vfs.mutex.Unlock()
+
+	sourcePath = path.Clean("/" + strings.TrimPrefix(sourcePath, "/"))
+	destPath = path.Clean("/" + strings.TrimPrefix(destPath, "/"))
+
+	sourceItem, exists := vfs.items[sourcePath]
+	if !exists {
+		return fmt.Errorf("source file not found: %s", sourcePath)
+	}
+
+	if sourceItem.IsDir {
+		return fmt.Errorf("cannot copy directory: %s", sourcePath)
+	}
+
+	if _, exists := vfs.items[destPath]; exists {
+		return fmt.Errorf("destination already exists: %s", destPath)
+	}
+
+	vfs.ensureDirectoriesExist(destPath)
+
+	newEntry := &types.FileEntry{
+		Path: destPath,
+		URL:  sourceItem.URL,
+	}
+
+	if err := vfs.store.SetFileEntry(newEntry); err != nil {
+		return fmt.Errorf("failed to persist copied file entry: %w", err)
+	}
+
+	vfs.items[destPath] = &types.VirtualItem{
+		Name:  path.Base(destPath),
+		Path:  destPath,
+		URL:   sourceItem.URL,
+		IsDir: false,
+	}
+
+	return nil
+}
+
+func (vfs *VirtualFS) RemoveDirectory(dirPath string) error {
+	vfs.mutex.Lock()
+	defer vfs.mutex.Unlock()
+
+	dirPath = path.Clean("/" + strings.TrimPrefix(dirPath, "/"))
+
+	// Don't allow removing root directory
+	if dirPath == "/" {
+		return fmt.Errorf("cannot remove root directory")
+	}
+
+	if !vfs.isDir(dirPath) {
+		return fmt.Errorf("directory not found: %s", dirPath)
+	}
+
+	var itemsToRemove []string
+	for itemPath := range vfs.items {
+		if strings.HasPrefix(itemPath, dirPath+"/") || itemPath == dirPath {
+			itemsToRemove = append(itemsToRemove, itemPath)
+		}
+	}
+
+	// Remove all files from storage first
+	for _, itemPath := range itemsToRemove {
+		if item, exists := vfs.items[itemPath]; exists && !item.IsDir {
+			if err := vfs.store.DeleteFileEntry(itemPath); err != nil {
+				return fmt.Errorf("failed to remove file entry %s: %w", itemPath, err)
+			}
+			// Also remove associated metadata if it exists
+			if item.URL != "" {
+				_ = vfs.store.DeleteFileMetadata(item.URL)
+			}
+		}
+	}
+
+	// Remove from memory
+	for _, itemPath := range itemsToRemove {
+		delete(vfs.items, itemPath)
+	}
+
+	// Remove directory entries
+	var dirsToRemove []string
+	for dir := range vfs.dirs {
+		if strings.HasPrefix(dir, dirPath+"/") || dir == dirPath {
+			dirsToRemove = append(dirsToRemove, dir)
+		}
+	}
+	for _, dir := range dirsToRemove {
+		delete(vfs.dirs, dir)
+	}
+
+	return nil
+}
+
+func (vfs *VirtualFS) MoveDirectory(sourcePath, destPath string) error {
+	vfs.mutex.Lock()
+	defer vfs.mutex.Unlock()
+
+	sourcePath = path.Clean("/" + strings.TrimPrefix(sourcePath, "/"))
+	destPath = path.Clean("/" + strings.TrimPrefix(destPath, "/"))
+
+	if sourcePath == "/" {
+		return fmt.Errorf("cannot move root directory")
+	}
+
+	if !vfs.isDir(sourcePath) {
+		return fmt.Errorf("source directory not found: %s", sourcePath)
+	}
+
+	if vfs.isDir(destPath) || vfs.items[destPath] != nil {
+		return fmt.Errorf("destination already exists: %s", destPath)
+	}
+
+	vfs.ensureDirectoriesExist(destPath)
+
+	var itemsToMove []string
+	for itemPath := range vfs.items {
+		if strings.HasPrefix(itemPath, sourcePath+"/") || itemPath == sourcePath {
+			itemsToMove = append(itemsToMove, itemPath)
+		}
+	}
+
+	for _, itemPath := range itemsToMove {
+		if item, exists := vfs.items[itemPath]; exists && !item.IsDir {
+			// Calculate new path
+			relativePath := strings.TrimPrefix(itemPath, sourcePath)
+			newPath := destPath + relativePath
+
+			newEntry := &types.FileEntry{
+				Path: newPath,
+				URL:  item.URL,
+			}
+
+			if err := vfs.store.SetFileEntry(newEntry); err != nil {
+				return fmt.Errorf("failed to persist moved file entry %s: %w", newPath, err)
+			}
+
+			if err := vfs.store.DeleteFileEntry(itemPath); err != nil {
+				_ = vfs.store.DeleteFileEntry(newPath)
+				return fmt.Errorf("failed to remove source file entry %s: %w", itemPath, err)
+			}
+		}
+	}
+
+	// Update memory - move items
+	newItems := make(map[string]*types.VirtualItem)
+	for _, itemPath := range itemsToMove {
+		if item, exists := vfs.items[itemPath]; exists {
+			relativePath := strings.TrimPrefix(itemPath, sourcePath)
+			newPath := destPath + relativePath
+
+			newItem := &types.VirtualItem{
+				Name:  path.Base(newPath),
+				Path:  newPath,
+				URL:   item.URL,
+				IsDir: item.IsDir,
+			}
+			newItems[newPath] = newItem
+			delete(vfs.items, itemPath)
+		}
+	}
+
+	// Add new items
+	for newPath, newItem := range newItems {
+		vfs.items[newPath] = newItem
+	}
+
+	// Update directory mappings
+	var dirsToMove []string
+	for dir := range vfs.dirs {
+		if strings.HasPrefix(dir, sourcePath+"/") || dir == sourcePath {
+			dirsToMove = append(dirsToMove, dir)
+		}
+	}
+
+	for _, dir := range dirsToMove {
+		relativePath := strings.TrimPrefix(dir, sourcePath)
+		newDir := destPath + relativePath
+		vfs.dirs[newDir] = true
+		delete(vfs.dirs, dir)
+	}
+
+	vfs.cleanupEmptyDirectories(sourcePath)
+
+	return nil
+}
+
+func (vfs *VirtualFS) CopyDirectory(sourcePath, destPath string) error {
+	vfs.mutex.Lock()
+	defer vfs.mutex.Unlock()
+
+	sourcePath = path.Clean("/" + strings.TrimPrefix(sourcePath, "/"))
+	destPath = path.Clean("/" + strings.TrimPrefix(destPath, "/"))
+
+	if !vfs.isDir(sourcePath) {
+		return fmt.Errorf("source directory not found: %s", sourcePath)
+	}
+
+	if vfs.isDir(destPath) || vfs.items[destPath] != nil {
+		return fmt.Errorf("destination already exists: %s", destPath)
+	}
+
+	vfs.ensureDirectoriesExist(destPath)
+
+	var itemsToCopy []string
+	for itemPath := range vfs.items {
+		if strings.HasPrefix(itemPath, sourcePath+"/") || itemPath == sourcePath {
+			itemsToCopy = append(itemsToCopy, itemPath)
+		}
+	}
+
+	for _, itemPath := range itemsToCopy {
+		if item, exists := vfs.items[itemPath]; exists && !item.IsDir {
+			relativePath := strings.TrimPrefix(itemPath, sourcePath)
+			newPath := destPath + relativePath
+
+			newEntry := &types.FileEntry{
+				Path: newPath,
+				URL:  item.URL,
+			}
+
+			if err := vfs.store.SetFileEntry(newEntry); err != nil {
+				return fmt.Errorf("failed to persist copied file entry %s: %w", newPath, err)
+			}
+		}
+	}
+
+	for _, itemPath := range itemsToCopy {
+		if item, exists := vfs.items[itemPath]; exists {
+			relativePath := strings.TrimPrefix(itemPath, sourcePath)
+			newPath := destPath + relativePath
+
+			newItem := &types.VirtualItem{
+				Name:  path.Base(newPath),
+				Path:  newPath,
+				URL:   item.URL,
+				IsDir: item.IsDir,
+			}
+			vfs.items[newPath] = newItem
+		}
+	}
+
+	var dirsToCopy []string
+	for dir := range vfs.dirs {
+		if strings.HasPrefix(dir, sourcePath+"/") || dir == sourcePath {
+			dirsToCopy = append(dirsToCopy, dir)
+		}
+	}
+
+	for _, dir := range dirsToCopy {
+		relativePath := strings.TrimPrefix(dir, sourcePath)
+		newDir := destPath + relativePath
+		vfs.dirs[newDir] = true
+	}
+
+	return nil
+}
+
+func (vfs *VirtualFS) ensureDirectoriesExist(filePath string) {
+	dir := path.Dir(filePath)
+	for dir != "/" && dir != "." {
+		if _, exists := vfs.items[dir]; !exists {
+			vfs.items[dir] = &types.VirtualItem{
+				Name:  path.Base(dir),
+				Path:  dir,
+				URL:   "",
+				IsDir: true,
+			}
+			vfs.dirs[dir] = true
+		}
+		dir = path.Dir(dir)
+	}
+}
