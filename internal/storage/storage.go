@@ -14,7 +14,7 @@ type PersistentStore struct {
 
 func New(dataDir string) (*PersistentStore, error) {
 	if dataDir == "" {
-		dataDir = "./data"
+		dataDir = "./proxydavData"
 	}
 
 	opts := badger.DefaultOptions(dataDir)

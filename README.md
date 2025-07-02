@@ -33,10 +33,6 @@ curl -X POST http://localhost:8080/api/files/add \
       {"path":"/docs/file.pdf","url":"https://example.com/file.pdf"}
     ]
   }'
-
-# Access via browser or WebDAV client
-# Browser: http://localhost:8080/
-# WebDAV: webdav://localhost:8080/
 ```
 
 ## Configuration
@@ -46,7 +42,7 @@ curl -X POST http://localhost:8080/api/files/add \
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-port` | Port to listen on | 8080 |
-| `-data-dir` | Data storage directory | ./data |
+| `-data-dir` | Data storage directory | ./proxydavData |
 | `-redirect` | Use redirects instead of proxying | false |
 | `-auth` | Enable basic authentication | false |
 | `-user` | Basic auth username | "" |

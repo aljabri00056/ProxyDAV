@@ -179,7 +179,7 @@ func (s *Server) Start() error {
 
 	log.Println("✅ ProxyDAV server started successfully!")
 	log.Printf("🌍 Server URLs:")
-	log.Printf("   🔗 WebDAV Endpoint: webdav://localhost:%d/", s.config.Port)
+	log.Printf("   🔗 WebDAV Endpoint: http://localhost:%d/", s.config.Port)
 	log.Printf("   🛠️  API Endpoint: http://localhost:%d/api/", s.config.Port)
 	log.Printf("   🩺 Health Check: http://localhost:%d/api/health", s.config.Port)
 	log.Println()
