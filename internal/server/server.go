@@ -175,12 +175,6 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func (s *Server) Start() error {
-	// Get file count for startup message
-	fileCount, err := s.store.CountFileEntries()
-	if err != nil {
-		log.Printf("⚠️  Warning: Could not count stored files: %v", err)
-		fileCount = -1 // Use -1 to indicate error
-	}
 
 	log.Println("📋 Server Configuration:")
 	log.Printf("   🌐 Port: %d", s.config.Port)
@@ -191,13 +185,6 @@ func (s *Server) Start() error {
 		log.Printf("   👤 Username: %s", s.config.AuthUser)
 	}
 	log.Printf("   🩺 Health Endpoint: /api/health")
-	if fileCount >= 0 {
-		if fileCount == 0 {
-			log.Printf("   📄 Stored Files: %d (database is empty)", fileCount)
-		} else {
-			log.Printf("   📄 Stored Files: %d loaded from database", fileCount)
-		}
-	}
 	log.Println()
 
 	go func() {

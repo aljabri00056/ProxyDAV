@@ -151,4 +151,3 @@ func TestAPIHandler_DeleteFiles(t *testing.T) {
 		t.Error("Expected /test2.txt to be deleted")
 	}
 }
-

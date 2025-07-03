@@ -158,10 +158,6 @@ func (s *PersistentStore) DeleteFileMetadata(url string) error {
 	})
 }
 
-func (s *PersistentStore) RunGarbageCollection() error {
-	return s.db.RunValueLogGC(0.5)
-}
-
 func (s *PersistentStore) CountFileEntries() (int, error) {
 	count := 0
 
@@ -221,13 +217,5 @@ func (s *PersistentStore) SetConfig(config map[string]interface{}) error {
 	return s.db.Update(func(txn *badger.Txn) error {
 		key := []byte("config:main")
 		return txn.Set(key, data)
-	})
-}
-
-// DeleteConfig removes the configuration from the database
-func (s *PersistentStore) DeleteConfig() error {
-	return s.db.Update(func(txn *badger.Txn) error {
-		key := []byte("config:main")
-		return txn.Delete(key)
 	})
 }
